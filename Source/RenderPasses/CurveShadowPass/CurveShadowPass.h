@@ -26,78 +26,55 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
 #pragma once
-#include "HSPData.slang"
 #include "Falcor.h"
 #include "RenderGraph/RenderPass.h"
+#include "RenderGraph/RenderPassHelpers.h"
 
 using namespace Falcor;
 
-struct HSPData
-{
-    float4x4 globalMat;
-
-    float depthBias = 0.005f;
-
-    float3 lightPos;
-    float lightBleedingReduction = 0;
-
-    uint32_t padding;
-
-#ifndef HOST_CODE
-    Texture2DArray shadowMap;
-
-#endif
-};
-
-class HairShadowPass : public RenderPass
+class CurveShadowPass : public RenderPass
 {
 public:
-    FALCOR_PLUGIN_CLASS(HairShadowPass, "HairShadowPass", "Insert pass description here.");
+    FALCOR_PLUGIN_CLASS(CurveShadowPass, "CurveShadowPass", "Insert pass description here.");
 
-    static ref<HairShadowPass> create(ref<Device> pDevice, const Properties& props)
+    static ref<CurveShadowPass> create(ref<Device> pDevice, const Properties& props)
     {
-        return make_ref<HairShadowPass>(pDevice, props);
+        return make_ref<CurveShadowPass>(pDevice, props);
     }
 
-    HairShadowPass(ref<Device> pDevice, const Properties& props);
+    CurveShadowPass(ref<Device> pDevice, const Properties& props);
 
     virtual Properties getProperties() const override;
     virtual RenderPassReflection reflect(const CompileData& compileData) override;
     virtual void compile(RenderContext* pRenderContext, const CompileData& compileData) override {}
     virtual void execute(RenderContext* pRenderContext, const RenderData& renderData) override;
-
     virtual void renderUI(Gui::Widgets& widget) override;
-    virtual void setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) override;
+    virtual void setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) override {}
     virtual bool onMouseEvent(const MouseEvent& mouseEvent) override { return false; }
     virtual bool onKeyEvent(const KeyboardEvent& keyEvent) override { return false; }
 
-    void setLight(ref<Light> pLight);
-    void GenerateShadowPass(const Camera* pCamera);
+    void updateFrameDim(const uint2 frameDim);
+    void executeCompute(RenderContext* pRenderContext, const RenderData& renderData);
+    void bindShaderData(const ShaderVar& var, const RenderData& renderData);
 
 private:
 
     ref<Scene> mpScene;
     ref<Program> mpProgram;
     ref<GraphicsState> mpGraphicsState;
-    ref<RasterizerState> mpRasterState;
     ref<ProgramVars> mpVars;
     ref<Fbo> mpFbo;
-
     ref<Light> mpLight;
 
-    // Shadow-pass
-    struct
-    {
-        ref<Fbo> pFbo;
-        float fboAspectRatio;
-        ref<Program> pProgram;
-        ref<ProgramVars> pVars;
-        ref<GraphicsState> pGraphicsState;
-        ref<RasterizerState> pRasterState;
-        float2 mapSize;
+    ref<ComputePass> mpComputePass;
 
-    } mShadowPass;
+    uint2 mFrameDim = {};
+    float2 mInvFrameDim = {};
+    uint32_t mFrameCount = 0;
+    ResourceFormat mVBufferFormat = HitInfo::kDefaultFormat;
+    RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default;
+    /// Output size in pixels when 'Fixed' size is selected.
+    uint2 mFixedOutputSize = {512, 512};
 
-    HSPData mHSPData;
-
+    ref<SampleGenerator> mpSampleGenerator;
 };

@@ -143,6 +143,53 @@ struct CurveIntersector
 
         return false;
     }
+
+    static bool intersectModified( const Ray ray, const GeometryInstanceID instanceID, const uint primitiveIndex, out Attribs attribs, out float t )
+    {
+        attribs = {};
+        t = {};
+
+        uint v0Index = gScene.getFirstCurveVertexIndex(instanceID, primitiveIndex);
+        const StaticCurveVertexData v0 = gScene.getCurveVertex(v0Index);
+        const StaticCurveVertexData v1 = gScene.getCurveVertex(v0Index + 1);
+
+        const float4x4 worldMat = gScene.getWorldMatrix(instanceID);
+        float3 dir = normalize(v1.position - v0.position); // 曲线方向
+        float3 up = float3(0, 1, 0);                       // 假定的“上”方向，视具体情况可能需要调整
+        float3 right = cross(dir, up);                     // 侧面方向
+
+        // 构造长方形顶点
+        float3 topLeft = v0.position - right * v0.radius;
+        float3 topRight = v0.position + right * v0.radius;
+        float3 bottomLeft = v1.position - right * v1.radius;
+        float3 bottomRight = v1.position + right * v1.radius;
+
+        // 将长方形分为两个三角形进行相交测试
+        float3 triangle1[3] = { topLeft, bottomLeft, topRight };
+        float3 triangle2[3] = { topRight, bottomLeft, bottomRight };
+        float3 barycentrics;
+        bool hit = false;
+
+        if (intersectRayTriangle(ray.origin, ray.dir, triangle1, barycentrics, t))
+        {
+            // 根据重心坐标更新attribs，此处省略具体实现
+            hit = true;
+        }
+        else if (intersectRayTriangle(ray.origin, ray.dir, triangle2, barycentrics, t))
+        {
+            // 根据重心坐标更新attribs，此处省略具体实现
+            hit = true;
+        }
+
+        if (hit)
+        {
+            // 确保计算的t值在光线的有效范围内
+            return (t >= ray.tMin && t <= ray.tMax);
+        }
+
+        return false;
+    }
+
 };
 
 /** Helper for intersecting rays against SDF grids.

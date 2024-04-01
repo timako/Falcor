@@ -517,7 +517,7 @@ void parse(ParserTarget& target, std::unique_ptr<Tokenizer> tokenizer)
         ParsedParameterVector parameterVector = parseParameters(nextToken, unget);
         (target.*apiFunc)(n, std::move(parameterVector), loc);
     };
-
+    
     auto syntaxError = [&](const Token& t)
     {
         if (t.token == "WorldEnd")
