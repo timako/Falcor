@@ -32,10 +32,20 @@
 
 namespace
 {
-
-const std::string kProgramComputeFile = "Source/RenderPasses/CurveShadowPass/CurveShadowPass.cs.slang";
+const std::string kProgramComputeFile = "RenderPasses/CurveShadowPass/CurveShadowPass.cs.slang";
 const std::string kShadowBufferName = "Shadow map";
 const std::string kShadowBufferDesc = "Shadow map visulization";
+
+const ChannelList kVBufferExtraChannels = {
+    // clang-format off
+    { "depth",          "gDepth",           "Depth buffer (NDC)",               true /* optional */, ResourceFormat::R32Float    },
+    { "mvec",           "gMotionVector",    "Motion vector",                    true /* optional */, ResourceFormat::RG32Float   },
+    { "viewW",          "gViewW",           "View direction in world space",    true /* optional */, ResourceFormat::RGBA32Float }, // TODO: Switch to packed 2x16-bit snorm format.
+    { "time",           "gTime",            "Per-pixel execution time",         true /* optional */, ResourceFormat::R32Uint     },
+    { "mask",           "gMask",            "Mask",                             true /* optional */, ResourceFormat::R32Float    },
+    // clang-format on
+};
+
 }; // namespace
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
@@ -95,6 +105,7 @@ void CurveShadowPass::executeCompute(RenderContext* pRenderContext, const Render
 
         DefineList defines;
         defines.add(mpScene->getSceneDefines());
+        defines.add(mpSampleGenerator->getDefines());
 
         mpComputePass = ComputePass::create(mpDevice, desc, defines, true);
 
@@ -104,7 +115,7 @@ void CurveShadowPass::executeCompute(RenderContext* pRenderContext, const Render
         mpSampleGenerator->bindShaderData(var);
     }
 
-    // mpComputePass->getProgram()->addDefines(getShaderDefines(renderData));
+    mpComputePass->getProgram()->addDefines(getShaderDefines(renderData));
 
     ShaderVar var = mpComputePass->getRootVar();
     bindShaderData(var, renderData);
@@ -112,7 +123,25 @@ void CurveShadowPass::executeCompute(RenderContext* pRenderContext, const Render
     mpComputePass->execute(pRenderContext, uint3(mFrameDim, 1));
 }
 
+DefineList CurveShadowPass::getShaderDefines(const RenderData& renderData)
+{
+    DefineList defines;
+    // For optional I/O resources, set 'is_valid_<name>' defines to inform the program of which ones it can access.
+    // TODO: This should be moved to a more general mechanism using Slang.
+    defines.add(getValidResourceDefines(kVBufferExtraChannels, renderData));
+    return defines;
+}
+
 void CurveShadowPass::renderUI(Gui::Widgets& widget) {}
+
+void CurveShadowPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene){
+    mpScene = pScene;
+}
+
+void CurveShadowPass::recreatePrograms()
+{
+    mpComputePass = nullptr;
+}
 
 void CurveShadowPass::updateFrameDim(const uint2 frameDim)
 {

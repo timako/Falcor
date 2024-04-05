@@ -38,9 +38,15 @@ RWTexture2D<float4> gViewW;
 RWTexture2D<uint> gTime;
 RWTexture2D<float> gMask;
 
+
+
+#define is_valid_gDepth 1
+#define is_valid_gMotionVector 1
+#define is_valid_gViewW 1
+#define is_valid_gTime 1
+#define is_valid_gMask 1
+
 #define is_valid(name) (is_valid_##name != 0)
-
-
 
 struct VBufferRT
 {

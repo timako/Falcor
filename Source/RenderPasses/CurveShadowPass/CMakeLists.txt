@@ -7,4 +7,6 @@ target_sources(CurveShadowPass PRIVATE
     CurveShadowPass.slang
 )
 
+target_copy_shaders(CurveShadowPass RenderPasses/CurveShadowPass)
+
 target_source_group(CurveShadowPass "RenderPasses")

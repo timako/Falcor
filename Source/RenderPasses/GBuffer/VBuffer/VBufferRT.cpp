@@ -111,7 +111,7 @@ void VBufferRT::execute(RenderContext* pRenderContext, const RenderData& renderD
         is_set(mpScene->getUpdates(), Scene::UpdateFlags::GeometryChanged) ||
         is_set(mpScene->getUpdates(), Scene::UpdateFlags::SDFGridConfigChanged))
     {
-        recreatePrograms();
+        recreatePrograms();//TODO
     }
 
     // Configure depth-of-field.
