@@ -14,7 +14,8 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
     GpuTimer timer;
     gVBufferRT.beginTime(timer);
 
-    const Ray ray = gVBufferRT.generateRay(pixel);
+    // const Ray ray = gVBufferRT.generateRay(pixel);
+    const Ray ray = gVBufferRT.generateRayWithLightVP(pixel);
 
     SceneRayQuery<VBufferRT::kUseAlphaTest> sceneRayQuery;
     HitInfo hit;

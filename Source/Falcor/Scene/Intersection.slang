@@ -155,7 +155,7 @@ struct CurveIntersector
 
         const float4x4 worldMat = gScene.getWorldMatrix(instanceID);
         float3 dir = normalize(v1.position - v0.position); // 曲线方向
-        float3 up = float3(0, 1, 0);                       // 假定的“上”方向，视具体情况可能需要调整
+        float3 up = ray.dir;                       // 假定的“上”方向，视具体情况可能需要调整
         float3 right = cross(dir, up);                     // 侧面方向
 
         // 构造长方形顶点
@@ -189,6 +189,7 @@ struct CurveIntersector
 
         return false;
     }
+
 
 };
 

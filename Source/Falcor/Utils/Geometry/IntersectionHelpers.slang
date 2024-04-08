@@ -188,6 +188,7 @@ bool intersectRayTriangle(const float3 rayOrigin, const float3 rayDir, const flo
     return true;
 }
 
+
 /**
  * Ray intersection against linear swept sphere based on [Han et al. 2019], Ray Tracing Generalized Tube Primitives: Method and
  * Applications. Paper link: http://www.sci.utah.edu/publications/Han2019a/tubes-final.pdf

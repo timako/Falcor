@@ -59,6 +59,11 @@ public:
     void recreatePrograms();
     DefineList getShaderDefines(const RenderData& renderData);
 
+    void setLight(ref<Light> pLight);
+    void GenerateShadowPass(const Camera* pCamera, float aspect);
+    void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP);
+    void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP);
+
 private:
 
     ref<Scene> mpScene;
@@ -73,10 +78,13 @@ private:
     uint2 mFrameDim = {};
     float2 mInvFrameDim = {};
     uint32_t mFrameCount = 0;
+    float3 mLightPos;
     ResourceFormat mVBufferFormat = HitInfo::kDefaultFormat;
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default;
     /// Output size in pixels when 'Fixed' size is selected.
     uint2 mFixedOutputSize = {512, 512};
+
+    float4x4 mLightVP;
 
     ref<SampleGenerator> mpSampleGenerator;
 };

@@ -58,6 +58,46 @@ struct Camera
         return ray;
     }
 
+    /** Computes a camera ray for a given pixel assuming a pinhole camera model.
+        The camera jitter is taken into account to compute the sample position on the image plane.
+        \param[in] pixel Pixel coordinates with origin in top-left.
+        \param[in] frameDim Image plane dimensions in pixels.
+        \param[in] applyJitter true if jitter should be applied else false.
+        \return Returns the camera ray.
+    */
+    Ray computeRayPinholeWithLightVP(uint2 pixel, uint2 frameDim, float3 lightPosW, float4x4 lightVP, bool applyJitter = true)
+    {
+        Ray ray;
+
+        // 光线的原点设置为点光源的位置
+        ray.origin = lightPosW;
+
+        // 根据 computeNonNormalizedRayDirPinhole 的逻辑计算非标准化光线方向
+        float2 p = (float2(pixel) + float2(0.5f, 0.5f)) / float2(frameDim); // 转换到 [0,1]，原点在左上角
+        if (applyJitter) {
+            // 应用抖动，抖动值从某个全局数据结构中获取
+            p += float2(-data.jitterX, data.jitterY);
+        }
+        float2 ndc = float2(2, -2) * p + float2(-1, 1); // 转换到 NDC
+
+        // 将 NDC 坐标转换为齐次裁剪空间的坐标
+        float4 clipSpacePos = float4(ndc.x, ndc.y, 1.0f, 1.0f);
+
+        // 使用逆VP矩阵将裁剪空间坐标转换回世界空间坐标
+        float4 worldSpacePos = mul(inverse(lightVP), clipSpacePos);
+        worldSpacePos /= worldSpacePos.w; // 齐次除法
+
+        // 计算光线方向
+        ray.dir = normalize(worldSpacePos.xyz - lightPosW);
+
+        // tMin 和 tMax 的计算假设保持不变
+        float invCos = 1.f / dot(normalize(data.cameraW), ray.dir);
+        ray.tMin = data.nearZ * invCos;
+        ray.tMax = data.farZ * invCos;
+
+        return ray;
+    }
+
     /** Computes the primary ray's direction, non-normalized assuming pinhole camera model.
         The camera jitter is taken into account to compute the sample position on the image plane.
         \param[in] pixel Pixel coordinates with origin in top-left.

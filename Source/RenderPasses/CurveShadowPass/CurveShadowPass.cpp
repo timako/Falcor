@@ -52,6 +52,178 @@ extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registr
 {
     registry.registerClass<RenderPass, CurveShadowPass>();
 }
+/*
+    给定相机参数，返回截锥体坐标，包围球球心坐标和半径
+*/
+// void camClipSpaceToWorldSpace(const Camera* pCamera, float3 viewFrustum[8], float3& center, float& radius)
+// {
+//     float3 clipSpace[8] =
+//     {
+//         float3(-1.0f, 1.0f, 0),
+//         float3(1.0f, 1.0f, 0),
+//         float3(1.0f, -1.0f, 0),
+//         float3(-1.0f, -1.0f, 0),
+//         float3(-1.0f, 1.0f, 1.0f),
+//         float3(1.0f, 1.0f, 1.0f),
+//         float3(1.0f, -1.0f, 1.0f),
+//         float3(-1.0f, -1.0f, 1.0f),
+//     };
+//     // VP逆矩阵，求出世界坐标空间里的截锥体坐标
+//     float4x4 invViewProj = pCamera->getInvViewProjMatrix();
+//     center = float3(0, 0, 0);
+
+//     for (uint32_t i = 0; i < 8; i++)
+//     {
+//         float4 crd = math::mul(invViewProj , float4(clipSpace[i], 1));
+//         viewFrustum[i] = float3(crd.x, crd.y, crd.z) / crd.w;
+//         center += viewFrustum[i];
+//     }
+//     for (int i = 0; i < 8; ++i) {
+
+//     }
+//     center *= (1.0f / 8.0f);
+
+//     // 计算包围球半径
+//     radius = 0;
+//     for (uint32_t i = 0; i < 8; i++)
+//     {
+//         float d = math::length(center - viewFrustum[i]);
+//         radius = std::max(d, radius);
+//     }
+// }
+// /*
+//     给定灯光参数，包围球中心，包围球半径，FBO的宽高比，返回光源VP矩阵
+// */
+
+// static void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP)
+// {
+//     const float3 lightPos = pLight->getWorldPosition();
+//     const float3 lookat = center; // 点光源定义direction 可以换成center ?
+//     // std::cout << "lookat: " << lookat.x << ", " << lookat.y << ", " << lookat.z << std::endl;
+
+//     float3 up(0, 1, 0);
+//     if (abs(dot(up, pLight->getWorldDirection())) >= 0.95f)
+//     {
+//         up = float3(1, 0, 0); // 如果光源方向与up向量几乎平行（即它们的点积的绝对值接近1），则更改up向量为(1, 0, 0)，以避免计算时的奇异性。
+//     }
+
+//     // float4x4 view = math::matrixFromLookAt(lightPos, lookat, up); // 从世界坐标系到光源视角坐标系的变换
+
+//     // float distFromCenter = math::length(lightPos - center);
+//     // float nearZ = std::max(0.1f, distFromCenter - radius);
+//     // float maxZ = std::min(radius * 2, distFromCenter + radius);
+//     // float angle = pLight->getOpeningAngle() * 2;
+//     // float4x4 proj = math::perspective(angle, fboAspectRatio, nearZ, maxZ);
+
+//     // shadowVP = math::mul(proj , view);
+// }
+
+// static void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
+// {
+//     createShadowMatrix((PointLight*)pLight, center, radius, fboAspectRatio, shadowVP);
+// }
+
+void CurveShadowPass::setLight(ref<Light> pLight)
+{
+    if(pLight){
+        mpLight = pLight;
+    }
+
+}
+
+// void CurveShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
+//     struct
+//     {
+//         float3 coords[8];
+//         float3 center;
+//         float radius;
+//     } camFrustum;
+
+//     camClipSpaceToWorldSpace(pCamera, camFrustum.coords, camFrustum.center, camFrustum.radius);
+
+//     createShadowMatrix(mpLight.get(), camFrustum.center, camFrustum.radius, aspect, mLightVP);
+
+// }
+
+void CurveShadowPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
+    const float3 lightPos = pLight->getWorldPosition();
+    mLightPos = lightPos;
+    const float3 lookat = center; // 点光源定义direction 可以换成center ?
+    const float3 Direction = math::normalize(center-lightPos);
+    float3 up(0, 1, 0);
+    if (abs(dot(up, Direction)) >= 0.95f)
+    {
+        up = float3(1, 0, 0); // 如果光源方向与up向量几乎平行（即它们的点积的绝对值接近1），则更改up向量为(1, 0, 0)，以避免计算时的奇异性。
+    }
+
+    float4x4 view = math::matrixFromLookAt(lightPos, lookat, up); // 从世界坐标系到光源视角坐标系的变换
+
+    float distFromCenter = math::length(lightPos - center);
+    float nearZ = std::max(0.1f, distFromCenter - radius);
+    float maxZ = std::min(radius * 2, distFromCenter + radius);
+    float angle = pLight->getOpeningAngle() * 2;
+
+    float4x4 proj = math::perspective(angle, fboAspectRatio, nearZ, maxZ);
+
+    shadowVP = math::mul(proj , view);
+
+    // std::cout << "lightPos: " << lightPos.x << ", " << lightPos.y << ", " << lightPos.z << std::endl;
+    // std::cout << "mLightPos: " << mLightPos.x << ", " << mLightPos.y << ", " << mLightPos.z << std::endl;
+    // std::cout << "lookat: " << lookat.x << ", " << lookat.y << ", " << lookat.z << std::endl;
+    // std::cout << "Direction: " << Direction.x << ", " << Direction.y << ", " << Direction.z << std::endl;
+    // std::cout << "up: " << up.x << ", " << up.y << ", " << up.z << std::endl;
+    // std::cout << "distFromCenter: " << distFromCenter << std::endl;
+    // std::cout << "nearZ: " << nearZ << std::endl;
+    // std::cout << "maxZ: " << maxZ << std::endl;
+    // std::cout << "angle: " << angle << std::endl;
+
+    // std::cout << "proj:" << std::endl;
+    // for (int i = 0; i < 4; ++i) {
+    //     for (int j = 0; j < 4; ++j) {
+    //         std::cout << proj[i][j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // std::cout << "view:" << std::endl;
+    // for (int i = 0; i < 4; ++i) {
+    //     for (int j = 0; j < 4; ++j) {
+    //         std::cout << view[i][j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // // 打印 shadowVP 矩阵
+    // std::cout << "shadowVP:" << std::endl;
+    // for (int i = 0; i < 4; ++i) {
+    //     for (int j = 0; j < 4; ++j) {
+    //         std::cout << shadowVP[i][j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+}
+
+void CurveShadowPass::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
+{
+    if(pLight->getType() == LightType::Point){
+        PointLight* ppLight = (PointLight*)pLight;
+        ppLight->setOpeningAngle((float)6.28319 / (float)8.0); // 设置正常的视场角（45度）
+        createShadowMatrix((PointLight*)pLight, center, radius, fboAspectRatio, shadowVP);
+    }
+}
+
+
+void CurveShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
+    AABB mpSceneBB = mpScene->getSceneBounds();
+    const float3 center((mpSceneBB.minPoint.x + mpSceneBB.maxPoint.x)/2,
+                        (mpSceneBB.minPoint.y + mpSceneBB.maxPoint.y)/2,
+                        (mpSceneBB.minPoint.z + mpSceneBB.maxPoint.z)/2);
+
+    const float radius = math::length(mpSceneBB.extent()) / 2;
+
+    createShadowMatrix(mpLight.get(), center, radius, aspect, mLightVP);
+}
 
 CurveShadowPass::CurveShadowPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     mpSampleGenerator = SampleGenerator::create(mpDevice, SAMPLE_GENERATOR_DEFAULT);
@@ -73,6 +245,8 @@ RenderPassReflection CurveShadowPass::reflect(const CompileData& compileData)
     .format(mVBufferFormat)
     .texture2D(sz.x, sz.y);
 
+    addRenderPassOutputs(reflector, kVBufferExtraChannels, ResourceBindFlags::UnorderedAccess, sz);
+
     return reflector;
 }
 
@@ -87,6 +261,7 @@ void CurveShadowPass::execute(RenderContext* pRenderContext, const RenderData& r
         pRenderContext->clearUAV(pOutput->getUAV().get(), uint4(0)); // unordered access view
         return;
     }
+    GenerateShadowPass(mpScene->getCamera().get(), (float)(pOutput->getWidth())/(float)(pOutput->getHeight()) );
 
     executeCompute(pRenderContext, renderData);
 
@@ -136,6 +311,8 @@ void CurveShadowPass::renderUI(Gui::Widgets& widget) {}
 
 void CurveShadowPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene){
     mpScene = pScene;
+
+    setLight(mpScene && mpScene->getLightCount() ? mpScene->getLight(0) : nullptr);
 }
 
 void CurveShadowPass::recreatePrograms()
@@ -164,8 +341,21 @@ void CurveShadowPass::bindShaderData(const ShaderVar& var, const RenderData& ren
     var["gVBufferRT"]["frameDim"] = mFrameDim;
     var["gVBufferRT"]["frameCount"] = mFrameCount;
 
+    // Camera lightCamera("lightCamera");
+
+
+    var["gVBufferRT"]["ShadowVP"] = mLightVP;
+    var["gVBufferRT"]["lightPos"] = mLightPos;
     // Bind resources.
     var["gVBuffer"] = getOutput(renderData, kShadowBufferName);
+
+    auto bind = [&](const ChannelDesc& channel)
+    {
+        ref<Texture> pTex = getOutput(renderData, channel.name);
+        var[channel.texname] = pTex;
+    };
+    for (const auto& channel : kVBufferExtraChannels)
+        bind(channel);
 
     // Bind output channels as UAV buffers.
     // auto bind = [&](const ChannelDesc& channel)

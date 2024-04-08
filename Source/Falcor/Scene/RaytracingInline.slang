@@ -132,7 +132,7 @@ bool traceSceneRayImpl<let Flags : int>(const bool useAlphaTest, inout RayQuery<
                 {
                     CurveIntersector::Attribs attribs;
                     float t;
-                    if (CurveIntersector::intersect(raySegment, instanceID, primitiveIndex, attribs, t))
+                    if (CurveIntersector::intersectModified(raySegment, instanceID, primitiveIndex, attribs, t))
                     {
                         rayQuery.CommitProceduralPrimitiveHit(t);
                         curveCommittedAttribs = attribs;

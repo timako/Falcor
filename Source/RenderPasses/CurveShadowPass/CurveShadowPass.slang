@@ -56,10 +56,18 @@ struct VBufferRT
 
     uint2 frameDim;
     uint frameCount;
+    float4x4 ShadowVP;
+    float3 lightPos;
+    Camera lightCamera;
 
     Ray generateRay(uint2 pixel)
     {
         return gScene.camera.computeRayPinhole(pixel, frameDim);
+    }
+
+    Ray generateRayWithLightVP(uint2 pixel)
+    {
+        return gScene.camera.computeRayPinholeWithLightVP(pixel, frameDim, lightPos, ShadowVP);
     }
 
     void writeHit(uint2 pixel, float3 rayOrigin, float3 rayDir, const HitInfo hit)
