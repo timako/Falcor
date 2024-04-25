@@ -343,6 +343,25 @@ GPU_TEST(TestBsdf_FrostbiteDiffuseBRDF)
     );
 }
 
+GPU_TEST(TestBsdf_HairBSDF)
+{
+    const float3 perp = normalize(float3(0.f, 0.f, 1.f));
+    const float3 oblique = normalize(float3(0.5f, 0.f, 0.5f));
+    const float3 grazing = normalize(float3(0.f, 1.f, 0.01f));
+
+    testSampling(
+        ctx,
+        {"Rendering.Materials.BSDFs.HairBSDF",
+         "HairBSDF",
+         "bsdf.albedo = float3(1.f);",
+         {
+             {"perp", perp, {0.f, 0.f, 0.f, 0.f}},
+             {"oblique", oblique, {0.f, 0.f, 0.f, 0.f}},
+             {"grazing", grazing, {0.f, 0.f, 0.f, 0.f}},
+         }}
+    );
+}
+
 GPU_TEST(TestBsdf_LambertDiffuseBRDF)
 {
     const float3 perp = normalize(float3(0.f, 0.f, 1.f));

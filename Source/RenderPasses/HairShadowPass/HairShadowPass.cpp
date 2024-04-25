@@ -130,7 +130,7 @@ void HairShadowPass::GenerateShadowPass(const Camera* pCamera){
 
 HairShadowPass::HairShadowPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     RasterizerState::Desc wireframeDesc;
-    wireframeDesc.setFillMode(RasterizerState::FillMode::Solid);
+    wireframeDesc.setFillMode(RasterizerState::FillMode::Wireframe);
     wireframeDesc.setCullMode(RasterizerState::CullMode::Back);
     mpRasterState = RasterizerState::create(wireframeDesc);
 

@@ -52,76 +52,6 @@ extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registr
 {
     registry.registerClass<RenderPass, CurveShadowPass>();
 }
-/*
-    给定相机参数，返回截锥体坐标，包围球球心坐标和半径
-*/
-// void camClipSpaceToWorldSpace(const Camera* pCamera, float3 viewFrustum[8], float3& center, float& radius)
-// {
-//     float3 clipSpace[8] =
-//     {
-//         float3(-1.0f, 1.0f, 0),
-//         float3(1.0f, 1.0f, 0),
-//         float3(1.0f, -1.0f, 0),
-//         float3(-1.0f, -1.0f, 0),
-//         float3(-1.0f, 1.0f, 1.0f),
-//         float3(1.0f, 1.0f, 1.0f),
-//         float3(1.0f, -1.0f, 1.0f),
-//         float3(-1.0f, -1.0f, 1.0f),
-//     };
-//     // VP逆矩阵，求出世界坐标空间里的截锥体坐标
-//     float4x4 invViewProj = pCamera->getInvViewProjMatrix();
-//     center = float3(0, 0, 0);
-
-//     for (uint32_t i = 0; i < 8; i++)
-//     {
-//         float4 crd = math::mul(invViewProj , float4(clipSpace[i], 1));
-//         viewFrustum[i] = float3(crd.x, crd.y, crd.z) / crd.w;
-//         center += viewFrustum[i];
-//     }
-//     for (int i = 0; i < 8; ++i) {
-
-//     }
-//     center *= (1.0f / 8.0f);
-
-//     // 计算包围球半径
-//     radius = 0;
-//     for (uint32_t i = 0; i < 8; i++)
-//     {
-//         float d = math::length(center - viewFrustum[i]);
-//         radius = std::max(d, radius);
-//     }
-// }
-// /*
-//     给定灯光参数，包围球中心，包围球半径，FBO的宽高比，返回光源VP矩阵
-// */
-
-// static void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP)
-// {
-//     const float3 lightPos = pLight->getWorldPosition();
-//     const float3 lookat = center; // 点光源定义direction 可以换成center ?
-//     // std::cout << "lookat: " << lookat.x << ", " << lookat.y << ", " << lookat.z << std::endl;
-
-//     float3 up(0, 1, 0);
-//     if (abs(dot(up, pLight->getWorldDirection())) >= 0.95f)
-//     {
-//         up = float3(1, 0, 0); // 如果光源方向与up向量几乎平行（即它们的点积的绝对值接近1），则更改up向量为(1, 0, 0)，以避免计算时的奇异性。
-//     }
-
-//     // float4x4 view = math::matrixFromLookAt(lightPos, lookat, up); // 从世界坐标系到光源视角坐标系的变换
-
-//     // float distFromCenter = math::length(lightPos - center);
-//     // float nearZ = std::max(0.1f, distFromCenter - radius);
-//     // float maxZ = std::min(radius * 2, distFromCenter + radius);
-//     // float angle = pLight->getOpeningAngle() * 2;
-//     // float4x4 proj = math::perspective(angle, fboAspectRatio, nearZ, maxZ);
-
-//     // shadowVP = math::mul(proj , view);
-// }
-
-// static void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
-// {
-//     createShadowMatrix((PointLight*)pLight, center, radius, fboAspectRatio, shadowVP);
-// }
 
 void CurveShadowPass::setLight(ref<Light> pLight)
 {
@@ -131,19 +61,6 @@ void CurveShadowPass::setLight(ref<Light> pLight)
 
 }
 
-// void CurveShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
-//     struct
-//     {
-//         float3 coords[8];
-//         float3 center;
-//         float radius;
-//     } camFrustum;
-
-//     camClipSpaceToWorldSpace(pCamera, camFrustum.coords, camFrustum.center, camFrustum.radius);
-
-//     createShadowMatrix(mpLight.get(), camFrustum.center, camFrustum.radius, aspect, mLightVP);
-
-// }
 
 void CurveShadowPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
     const float3 lightPos = pLight->getWorldPosition();

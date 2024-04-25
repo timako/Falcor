@@ -23,7 +23,9 @@ VSOut vsMain(VSIn vIn)
 float4 psMain(VSOut vIn) : SV_Target
 {
     float3 normalColor = vIn.normalW * 0.5 + 0.5; // 将[-1, 1]范围的法线映射到[0, 1]
-    return float4(normalColor, 1.0);             // Alpha设为1
+    return float4(1.0);
+    // return float4(normalColor, 1.0);             // Alpha设为1
+
 }
 
 // ShadowPassVSOut vsMain(VSIn vIn)

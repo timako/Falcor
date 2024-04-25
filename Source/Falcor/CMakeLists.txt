@@ -275,6 +275,7 @@ target_sources(Falcor PRIVATE
     Rendering/Materials/BSDFs/DiffuseSpecularBRDF.slang
     Rendering/Materials/BSDFs/DisneyDiffuseBRDF.slang
     Rendering/Materials/BSDFs/FrostbiteDiffuseBRDF.slang
+    Rendering/Materials/BSDFs/HairBSDF.slang
     Rendering/Materials/BSDFs/LambertDiffuseBRDF.slang
     Rendering/Materials/BSDFs/LambertDiffuseBTDF.slang
     Rendering/Materials/BSDFs/OrenNayarBRDF.slang
@@ -821,7 +822,7 @@ target_compile_options(Falcor
             /WX                             # warnings as errors
             /W4                             # increase warning level
             /wd4251                         # 'type' : class 'type1' needs to have dll-interface to be used by clients of class 'type2'
-            /wd4819                         # The file contains a character that cannot be represented in the current code page(936)             
+            /wd4819                         # The file contains a character that cannot be represented in the current code page(936)
             /wd4244                         # 'conversion' conversion from 'type1' to 'type2', possible loss of data
             /wd4267                         # 'var' : conversion from 'size_t' to 'type', possible loss of data
             /wd4100                         # unreferenced formal parameter

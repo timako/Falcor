@@ -80,7 +80,7 @@ struct DiffuseSpecularBRDF : IBSDF
         float alpha = roughness * roughness;
         float uSelect = sampleNext1D(sg);
         float2 u = sampleNext2D(sg);
-
+        
         if (uSelect < diffuseWeight)
         {
             wo = sample_cosine_hemisphere_concentric(u, pdf);

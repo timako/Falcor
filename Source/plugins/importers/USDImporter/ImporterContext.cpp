@@ -683,7 +683,7 @@ namespace Falcor
             }
             else
             {
-                logWarning("Curve '{}' has no texture coordinates.", curveName);
+                // logWarning("Curve '{}' has no texture coordinates.", curveName);
             }
 
             return true;
@@ -753,7 +753,7 @@ namespace Falcor
             }
             else
             {
-                logWarning("Curve '{}' has no texture coordinates.", curveName);
+                // logWarning("Curve '{}' has no texture coordinates.", curveName);
             }
 
             return true;
@@ -1805,7 +1805,7 @@ namespace Falcor
         }
         if (!pMaterial)
         {
-            logInfo("No material bound to '{}'. Using a default material.", primName);
+            // logInfo("No material bound to '{}'. Using a default material.", primName);
             pMaterial = getDefaultMaterial(prim);
         }
         return pMaterial;

@@ -133,7 +133,7 @@ interface IBSDF
         \return Returns true if successful.
     */
     bool sample<S : ISampleGenerator>(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobeType, inout S sg);
-
+    
     /** Evaluates the directional pdf for sampling outgoing direction wo.
         \param[in] wi Incident direction.
         \param[in] wo Outgoing direction.

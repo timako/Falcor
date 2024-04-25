@@ -824,7 +824,7 @@ namespace Falcor
 
         auto missing_element_warning = [&](const std::string& element)
         {
-            logWarning("The curve '{}' is missing the element {}. This is not an error, the element will be filled with zeros which may result in incorrect rendering.", curve.name, element);
+            // logWarning("The curve '{}' is missing the element {}. This is not an error, the element will be filled with zeros which may result in incorrect rendering.", curve.name, element);
         };
 
         if (curve.pMaterial == nullptr) throw_on_missing_element("material");
