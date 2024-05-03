@@ -2188,9 +2188,9 @@ namespace Falcor
 
         if (is_set(builder.getFlags(), SceneBuilder::Flags::TessellateCurvesIntoPolyTubes))
         {
-            mode = CurveTessellationMode::PolyTube;
+                ;
         }
-
+        mode = CurveTessellationMode::PolyTube;
         // Example of Attribute
         {
             if(auto strMode = builder.getSettings().getAttribute<std::string>(curvePrim.GetPath().GetString(), "curves:mode"))

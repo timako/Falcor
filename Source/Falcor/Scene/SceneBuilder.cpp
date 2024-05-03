@@ -474,7 +474,7 @@ namespace Falcor
 
         auto missing_element_warning = [&](const std::string& element)
         {
-            logWarning("The mesh '{}' is missing the element {}. This is not an error, the element will be filled with zeros which may result in incorrect rendering.", mesh.name, element);
+            // logWarning("The mesh '{}' is missing the element {}. This is not an error, the element will be filled with zeros which may result in incorrect rendering.", mesh.name, element);
         };
 
         if (mesh.topology != Vao::Topology::TriangleList) FALCOR_THROW("Error when adding the mesh '{}' to the scene. Only triangle list topology is supported.", mesh.name);

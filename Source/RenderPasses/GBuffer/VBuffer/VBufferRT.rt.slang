@@ -125,7 +125,7 @@ void curveIntersection()
     const Ray ray = Ray(WorldRayOrigin(), WorldRayDirection(), RayTMin(), RayTCurrent());
     CurveIntersector::Attribs attribs;
     float t;
-    if (CurveIntersector::intersectModified(ray, getGeometryInstanceID(), PrimitiveIndex(), attribs, t))
+    if (CurveIntersector::intersect(ray, getGeometryInstanceID(), PrimitiveIndex(), attribs, t))
     {
         ReportHit(t, 0, attribs);
     }

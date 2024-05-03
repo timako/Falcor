@@ -30,6 +30,7 @@
 
 namespace {
     const char kShaderFile[] = "RenderPasses/HairShadowPass/HairShadowPass.3d.slang";
+    const char kShaderName[] = "output";
 }
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
@@ -37,47 +38,20 @@ extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registr
     registry.registerClass<RenderPass, HairShadowPass>();
 }
 
-void camClipSpaceToWorldSpace(const Camera* pCamera, float3 viewFrustum[8], float3& center, float& radius)
+void HairShadowPass::setLight(ref<Light> pLight)
 {
-    float3 clipSpace[8] =
-    {
-        float3(-1.0f, 1.0f, 0),
-        float3(1.0f, 1.0f, 0),
-        float3(1.0f, -1.0f, 0),
-        float3(-1.0f, -1.0f, 0),
-        float3(-1.0f, 1.0f, 1.0f),
-        float3(1.0f, 1.0f, 1.0f),
-        float3(1.0f, -1.0f, 1.0f),
-        float3(-1.0f, -1.0f, 1.0f),
-    };
-
-    float4x4 invViewProj = pCamera->getInvViewProjMatrix();
-    center = float3(0, 0, 0);
-
-    for (uint32_t i = 0; i < 8; i++)
-    {
-        float4 crd = math::mul(invViewProj , float4(clipSpace[i], 1));
-        viewFrustum[i] = float3(crd.x, crd.y, crd.z) / crd.w;
-        center += viewFrustum[i];
-    }
-
-    center *= (1.0f / 8.0f);
-
-    // Calculate bounding sphere radius
-    radius = 0;
-    for (uint32_t i = 0; i < 8; i++)
-    {
-        float d = math::length(center - viewFrustum[i]);
-        radius = std::max(d, radius);
+    if(pLight){
+        mpLight = pLight;
     }
 }
 
-static void createShadowMatrix(const PointLight* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
-{
+void HairShadowPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
     const float3 lightPos = pLight->getWorldPosition();
-    const float3 lookat = pLight->getWorldDirection() + lightPos;
+    mLightPos = lightPos;
+    const float3 lookat = center; // 点光源定义direction 可以换成center ?
+    const float3 Direction = math::normalize(center-lightPos);
     float3 up(0, 1, 0);
-    if (abs(dot(up, pLight->getWorldDirection())) >= 0.95f)
+    if (abs(dot(up, Direction)) >= 0.95f)
     {
         up = float3(1, 0, 0); // 如果光源方向与up向量几乎平行（即它们的点积的绝对值接近1），则更改up向量为(1, 0, 0)，以避免计算时的奇异性。
     }
@@ -88,50 +62,38 @@ static void createShadowMatrix(const PointLight* pLight, const float3& center, f
     float nearZ = std::max(0.1f, distFromCenter - radius);
     float maxZ = std::min(radius * 2, distFromCenter + radius);
     float angle = pLight->getOpeningAngle() * 2;
+
     float4x4 proj = math::perspective(angle, fboAspectRatio, nearZ, maxZ);
 
     shadowVP = math::mul(proj , view);
 }
 
-static void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
+void HairShadowPass::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
 {
-    switch (pLight->getType())
-    {
-    case LightType::Point:
-        return createShadowMatrix((PointLight*)pLight, center, radius, fboAspectRatio, shadowVP);
-    default:
-        FALCOR_UNREACHABLE();
+    if(pLight->getType() == LightType::Point){
+        PointLight* ppLight = (PointLight*)pLight;
+        ppLight->setOpeningAngle((float)6.28319 / (float)8.0); // 设置正常的视场角（45度）
+        createShadowMatrix((PointLight*)pLight, center, radius, fboAspectRatio, shadowVP);
     }
 }
 
-void HairShadowPass::setLight(ref<Light> pLight)
-{
-    mpLight = pLight;
+
+void HairShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
+    AABB mpSceneBB = mpScene->getSceneBounds();
+    const float3 center((mpSceneBB.minPoint.x + mpSceneBB.maxPoint.x)/2,
+                        (mpSceneBB.minPoint.y + mpSceneBB.maxPoint.y)/2,
+                        (mpSceneBB.minPoint.z + mpSceneBB.maxPoint.z)/2);
+
+    const float radius = math::length(mpSceneBB.extent()) / 2;
+
+    createShadowMatrix(mpLight.get(), center, radius, aspect, mLightVP);
 }
 
-void HairShadowPass::GenerateShadowPass(const Camera* pCamera){
-    struct
-    {
-        float3 coords[8];
-        float3 center;
-        float radius;
-    } camFrustum;
-
-    camClipSpaceToWorldSpace(pCamera, camFrustum.coords, camFrustum.center, camFrustum.radius);
-
-    createShadowMatrix(mpLight.get(), camFrustum.center, camFrustum.radius, mShadowPass.fboAspectRatio, mHSPData.globalMat);
-
-    float nearPlane = pCamera->getNearPlane();
-    float farPlane = pCamera->getFarPlane();
-    float depthRange = farPlane - nearPlane;
-
-
-}
 
 HairShadowPass::HairShadowPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     RasterizerState::Desc wireframeDesc;
-    wireframeDesc.setFillMode(RasterizerState::FillMode::Wireframe);
-    wireframeDesc.setCullMode(RasterizerState::CullMode::Back);
+    wireframeDesc.setFillMode(RasterizerState::FillMode::Solid);
+    wireframeDesc.setCullMode(RasterizerState::CullMode::None);
     mpRasterState = RasterizerState::create(wireframeDesc);
 
     mpGraphicsState = GraphicsState::create(mpDevice);
@@ -148,21 +110,27 @@ RenderPassReflection HairShadowPass::reflect(const CompileData& compileData)
 {
     // Define the required resources here
     RenderPassReflection reflector;
-    reflector.addOutput("output", "Wireframe view texture");
+    reflector.addOutput(kShaderName, "Wireframe view texture");
     return reflector;
 }
 
 void HairShadowPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
+    auto pOutput = renderData.getTexture(kShaderName); // get output texture pointer
+    FALCOR_ASSERT(pOutput);
+
     auto pTex = renderData.getTexture("output");
     mpFbo->attachColorTarget(pTex, uint32_t(0));
     const float4 clearColor(0, 0, 0, 1);
     pRenderContext->clearFbo(mpFbo.get(), clearColor, 1.0f, 0, FboAttachmentType::All);
     mpGraphicsState->setFbo(mpFbo);
-
+    if(mpScene){
+        GenerateShadowPass(mpScene->getCamera().get(), (float)(pOutput->getWidth())/(float)(pOutput->getHeight()) );
+    }
 
     if (mpScene) {
-        mpVars->getRootVar()["PerFrameCB"]["gColor"] = float4(0, 1, 0, 1);
+        mpVars->getRootVar()["PerFrameCB"]["ShadowVP"] = mLightVP;
+        mpVars->getRootVar()["PerFrameCB"]["lightPos"] = mLightPos;
         mpScene->rasterize(pRenderContext, mpGraphicsState.get(), mpVars.get(), mpRasterState, mpRasterState);
     }
 }

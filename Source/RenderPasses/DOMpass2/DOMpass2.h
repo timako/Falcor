@@ -48,17 +48,17 @@ struct HSPData
 #endif
 };
 
-class DeepOpacityMapPass : public RenderPass
+class DOMpass2 : public RenderPass
 {
 public:
-    FALCOR_PLUGIN_CLASS(DeepOpacityMapPass, "DeepOpacityMapPass", "Insert pass description here.");
+    FALCOR_PLUGIN_CLASS(DOMpass2, "DOMpass2", "Insert pass description here.");
 
-    static ref<DeepOpacityMapPass> create(ref<Device> pDevice, const Properties& props)
+    static ref<DOMpass2> create(ref<Device> pDevice, const Properties& props)
     {
-        return make_ref<DeepOpacityMapPass>(pDevice, props);
+        return make_ref<DOMpass2>(pDevice, props);
     }
 
-    DeepOpacityMapPass(ref<Device> pDevice, const Properties& props);
+    DOMpass2(ref<Device> pDevice, const Properties& props);
 
     virtual Properties getProperties() const override;
     virtual RenderPassReflection reflect(const CompileData& compileData) override;
@@ -73,7 +73,10 @@ public:
     void setLight(ref<Light> pLight);
     void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP);
     void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP);
+
+
     void GenerateShadowPass(const Camera* pCamera, float aspect);
+
 private:
 
     ref<Scene> mpScene;
@@ -82,8 +85,9 @@ private:
     ref<RasterizerState> mpRasterState;
     ref<ProgramVars> mpVars;
     ref<Fbo> mpFbo;
-
     ref<Light> mpLight;
+    float3 mLightPos;
+    float4x4 mLightVP;
 
     // Shadow-pass
     struct
@@ -100,6 +104,4 @@ private:
 
     HSPData mHSPData;
 
-    float3 mLightPos;
-    float4x4 mLightVP;
 };

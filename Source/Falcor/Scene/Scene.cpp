@@ -393,6 +393,42 @@ namespace Falcor
 
         pState->setRasterizerState(pCurrentRS);
     }
+    void rasterizeCurve(RenderContext* pRenderContext, GraphicsState* pState, ProgramVars* pVars, RasterizerState::CullMode cullMode = RasterizerState::CullMode::Back){
+        ;
+    }
+
+    void Scene::rasterizeCurve(RenderContext* pRenderContext, GraphicsState* pState, ProgramVars* pVars, const ref<RasterizerState>& pRasterizerStateCW, const ref<RasterizerState>& pRasterizerStateCCW)
+    {
+        FALCOR_PROFILE(pRenderContext, "rasterizeScene");
+
+        pVars->setParameterBlock(kParameterBlockName, mpSceneBlock);
+
+        auto pCurrentRS = pState->getRasterizerState();
+        bool isIndexed = hasIndexBuffer();
+
+        for (const auto& draw : mDrawArgs)
+        {
+            FALCOR_ASSERT(draw.count > 0);
+
+            // Set state.
+            pState->setVao(mpCurveVao);
+
+            if (draw.ccw) pState->setRasterizerState(pRasterizerStateCCW);
+            else pState->setRasterizerState(pRasterizerStateCW);
+
+            // Draw the primitives.
+            if (isIndexed)
+            {
+                pRenderContext->drawIndexedIndirect(pState, pVars, draw.count, draw.pBuffer.get(), 0, nullptr, 0);
+            }
+            else
+            {
+                pRenderContext->drawIndirect(pState, pVars, draw.count, draw.pBuffer.get(), 0, nullptr, 0);
+            }
+        }
+
+        pState->setRasterizerState(pCurrentRS);
+    }
 
     uint32_t Scene::getRaytracingMaxAttributeSize() const
     {

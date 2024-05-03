@@ -31,75 +31,32 @@
 
 using namespace Falcor;
 
-struct HSPData
-{
-    float4x4 globalMat;
-
-    float depthBias = 0.005f;
-
-    float3 lightPos;
-    float lightBleedingReduction = 0;
-
-    uint32_t padding;
-
-#ifndef HOST_CODE
-    Texture2DArray shadowMap;
-
-#endif
-};
-
-class DeepOpacityMapPass : public RenderPass
+class WireframePass : public RenderPass
 {
 public:
-    FALCOR_PLUGIN_CLASS(DeepOpacityMapPass, "DeepOpacityMapPass", "Insert pass description here.");
+    FALCOR_PLUGIN_CLASS(WireframePass, "WireframePass", "Insert pass description here.");
 
-    static ref<DeepOpacityMapPass> create(ref<Device> pDevice, const Properties& props)
+    static ref<WireframePass> create(ref<Device> pDevice, const Properties& props)
     {
-        return make_ref<DeepOpacityMapPass>(pDevice, props);
+        return make_ref<WireframePass>(pDevice, props);
     }
 
-    DeepOpacityMapPass(ref<Device> pDevice, const Properties& props);
+    WireframePass(ref<Device> pDevice, const Properties& props);
 
     virtual Properties getProperties() const override;
     virtual RenderPassReflection reflect(const CompileData& compileData) override;
     virtual void compile(RenderContext* pRenderContext, const CompileData& compileData) override {}
     virtual void execute(RenderContext* pRenderContext, const RenderData& renderData) override;
-
     virtual void renderUI(Gui::Widgets& widget) override;
     virtual void setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) override;
     virtual bool onMouseEvent(const MouseEvent& mouseEvent) override { return false; }
     virtual bool onKeyEvent(const KeyboardEvent& keyEvent) override { return false; }
 
-    void setLight(ref<Light> pLight);
-    void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP);
-    void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP);
-    void GenerateShadowPass(const Camera* pCamera, float aspect);
 private:
-
     ref<Scene> mpScene;
     ref<Program> mpProgram;
     ref<GraphicsState> mpGraphicsState;
     ref<RasterizerState> mpRasterState;
     ref<ProgramVars> mpVars;
     ref<Fbo> mpFbo;
-
-    ref<Light> mpLight;
-
-    // Shadow-pass
-    struct
-    {
-        ref<Fbo> pFbo;
-        float fboAspectRatio;
-        ref<Program> pProgram;
-        ref<ProgramVars> pVars;
-        ref<GraphicsState> pGraphicsState;
-        ref<RasterizerState> pRasterState;
-        float2 mapSize;
-
-    } mShadowPass;
-
-    HSPData mHSPData;
-
-    float3 mLightPos;
-    float4x4 mLightVP;
 };

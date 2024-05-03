@@ -25,40 +25,26 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
-#include "DeepOpacityMapPass.h"
-#include "RenderGraph/RenderPassHelpers.h"
+#include "DOMpass2.h"
+#include "Scene/HitInfo.h"
 #include "RenderGraph/RenderPassStandardFlags.h"
-#include "algorithm"
+#include "RenderGraph/RenderPassHelpers.h"
 
 namespace {
-    const char kShaderFile[] = "RenderPasses/DeepOpacityMapPass/DeepOpacityMapPass.3d.slang";
-    const char kShaderName[] = "output";
-
-    const ChannelList kInputChannels = {
-        // clang-format off
-        { "Shadowmap",        "gShadowmap",     "Shadowmap of main light" },
-        // clang-format on
-    };
-    const ChannelList kVBufferExtraChannels = {
-        // clang-format off
-        { "DOM map",           "gDOMtexture",            "DOM layers output",                         true /* optional */, ResourceFormat::RGBA32Float    },
-        // clang-format on
-    };
+    const char kShaderFile[] = "RenderPasses/DOMpass2/DOMpass2.3d.slang";
 }
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
 {
-    registry.registerClass<RenderPass, DeepOpacityMapPass>();
+    registry.registerClass<RenderPass, DOMpass2>();
 }
 
-void DeepOpacityMapPass::setLight(ref<Light> pLight)
+void DOMpass2::setLight(ref<Light> pLight)
 {
-    if(pLight){
-        mpLight = pLight;
-    }
+    mpLight = pLight;
 }
 
-void DeepOpacityMapPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
+void DOMpass2::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
     const float3 lightPos = pLight->getWorldPosition();
     mLightPos = lightPos;
     const float3 lookat = center; // 点光源定义direction 可以换成center ?
@@ -79,9 +65,10 @@ void DeepOpacityMapPass::createShadowMatrix(const PointLight* pLight, const floa
     float4x4 proj = math::perspective(angle, fboAspectRatio, nearZ, maxZ);
 
     shadowVP = math::mul(proj , view);
+
 }
 
-void DeepOpacityMapPass::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
+void DOMpass2::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
 {
     if(pLight->getType() == LightType::Point){
         PointLight* ppLight = (PointLight*)pLight;
@@ -90,8 +77,7 @@ void DeepOpacityMapPass::createShadowMatrix(const Light* pLight, const float3& c
     }
 }
 
-
-void DeepOpacityMapPass::GenerateShadowPass(const Camera* pCamera, float aspect){
+void DOMpass2::GenerateShadowPass(const Camera* pCamera, float aspect){
     AABB mpSceneBB = mpScene->getSceneBounds();
     const float3 center((mpSceneBB.minPoint.x + mpSceneBB.maxPoint.x)/2,
                         (mpSceneBB.minPoint.y + mpSceneBB.maxPoint.y)/2,
@@ -102,22 +88,10 @@ void DeepOpacityMapPass::GenerateShadowPass(const Camera* pCamera, float aspect)
     createShadowMatrix(mpLight.get(), center, radius, aspect, mLightVP);
 }
 
-float _LayerDistribution = 0.1f;
-float4 ComputeDeepShadowLayerDepths(const float LayerDistribution)
-{
-    float Exponent = std::clamp(LayerDistribution, (float)0.0, (float)1.0) * 5.2f + 1.0f;
-    float4 depths;
-    depths.x = std::pow(2.0f, Exponent);
-    depths.y = std::pow(3.0f, Exponent);
-    depths.z = std::pow(3.5f, Exponent);
-    depths.w = std::pow(4.0f, Exponent);
-    return depths;
-}
-
-DeepOpacityMapPass::DeepOpacityMapPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
+DOMpass2::DOMpass2(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     RasterizerState::Desc wireframeDesc;
-    wireframeDesc.setFillMode(RasterizerState::FillMode::Solid);
-    wireframeDesc.setCullMode(RasterizerState::CullMode::None);
+    wireframeDesc.setFillMode(RasterizerState::FillMode::Wireframe);
+    wireframeDesc.setCullMode(RasterizerState::CullMode::Back);
     mpRasterState = RasterizerState::create(wireframeDesc);
 
     mpGraphicsState = GraphicsState::create(mpDevice);
@@ -125,46 +99,37 @@ DeepOpacityMapPass::DeepOpacityMapPass(ref<Device> pDevice, const Properties& pr
     mpFbo = Fbo::create(mpDevice);
 }
 
-Properties DeepOpacityMapPass::getProperties() const
+Properties DOMpass2::getProperties() const
 {
     return {};
 }
 
-RenderPassReflection DeepOpacityMapPass::reflect(const CompileData& compileData)
+RenderPassReflection DOMpass2::reflect(const CompileData& compileData)
 {
     // Define the required resources here
     RenderPassReflection reflector;
-    addRenderPassInputs(reflector, kInputChannels);
-    reflector.addOutput(kShaderName, "Wireframe view texture");
-    addRenderPassOutputs(reflector, kVBufferExtraChannels, ResourceBindFlags::UnorderedAccess);
+    reflector.addOutput("output", "Wireframe view texture");
     return reflector;
 }
 
-void DeepOpacityMapPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
+void DOMpass2::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
-    auto pOutput = renderData.getTexture(kShaderName); // get output texture pointer
-    FALCOR_ASSERT(pOutput);
-
     auto pTex = renderData.getTexture("output");
     mpFbo->attachColorTarget(pTex, uint32_t(0));
     const float4 clearColor(0, 0, 0, 1);
     pRenderContext->clearFbo(mpFbo.get(), clearColor, 1.0f, 0, FboAttachmentType::All);
     mpGraphicsState->setFbo(mpFbo);
-    if(mpScene){
-        GenerateShadowPass(mpScene->getCamera().get(), (float)(pOutput->getWidth())/(float)(pOutput->getHeight()) );
-    }
+
 
     if (mpScene) {
-        mpVars->getRootVar()["PerFrameCB"]["ShadowVP"] = mLightVP;
-        mpVars->getRootVar()["PerFrameCB"]["lightPos"] = mLightPos;
-        mpVars->getRootVar()["PerFrameCB"]["_DeepShadowLayerSplit"] = ComputeDeepShadowLayerDepths(_LayerDistribution);
+        mpVars->getRootVar()["PerFrameCB"]["gColor"] = float4(0, 1, 0, 1);
         mpScene->rasterize(pRenderContext, mpGraphicsState.get(), mpVars.get(), mpRasterState, mpRasterState);
     }
 }
 
-void DeepOpacityMapPass::renderUI(Gui::Widgets& widget) {}
+void DOMpass2::renderUI(Gui::Widgets& widget) {}
 
-void DeepOpacityMapPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) {
+void DOMpass2::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) {
     mpScene = pScene;
 
     setLight(mpScene && mpScene->getLightCount() ? mpScene->getLight(0) : nullptr);
@@ -172,7 +137,7 @@ void DeepOpacityMapPass::setScene(RenderContext* pRenderContext, const ref<Scene
     if (mpScene && mpProgram == nullptr) {
         ProgramDesc desc;
         desc.addShaderModules(mpScene->getShaderModules());
-        desc.addShaderLibrary(kShaderFile).vsEntry("vsMain").psEntry("psMain");
+        desc.addShaderLibrary(kShaderFile).vsEntry("vsMain").gsEntry("gsMain").psEntry("psMain");
         desc.addTypeConformances(mpScene->getTypeConformances());
 
         mpProgram = Program::create(mpDevice, desc, mpScene->getSceneDefines());

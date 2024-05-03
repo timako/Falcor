@@ -1000,6 +1000,10 @@ namespace Falcor
         */
         void rasterize(RenderContext* pRenderContext, GraphicsState* pState, ProgramVars* pVars, const ref<RasterizerState>& pRasterizerStateCW, const ref<RasterizerState>& pRasterizerStateCCW);
 
+        void rasterizeCurve(RenderContext* pRenderContext, GraphicsState* pState, ProgramVars* pVars, RasterizerState::CullMode cullMode = RasterizerState::CullMode::Back);
+
+        void rasterizeCurve(RenderContext* pRenderContext, GraphicsState* pState, ProgramVars* pVars, const ref<RasterizerState>& pRasterizerStateCW, const ref<RasterizerState>& pRasterizerStateCCW);
+
         /** Get the required raytracing maximum attribute size for this scene.
             Note: This depends on what types of geometry are used in the scene.
             \return Max attribute size in bytes.

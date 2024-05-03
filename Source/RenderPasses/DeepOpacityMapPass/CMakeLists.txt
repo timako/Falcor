@@ -3,7 +3,7 @@ add_plugin(DeepOpacityMapPass)
 target_sources(DeepOpacityMapPass PRIVATE
     DeepOpacityMapPass.cpp
     DeepOpacityMapPass.h
-    DeepOpacityMapPass.slang
+    DeepOpacityMapPass.3d.slang
 )
 target_copy_shaders(DeepOpacityMapPass RenderPasses/DeepOpacityMapPass)
 

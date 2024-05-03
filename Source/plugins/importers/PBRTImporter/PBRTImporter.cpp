@@ -1674,7 +1674,7 @@ Shape createShape(BuilderContext& ctx, const ShapeSceneEntity& entity)
  */
 std::variant<Falcor::MeshID, Falcor::CurveID> createCurveGeometry(BuilderContext& ctx, const CurveAggregate& curveAggregate)
 {
-    CurveTessellationMode mode = CurveTessellationMode::LinearSweptSphere;
+    CurveTessellationMode mode = CurveTessellationMode::PolyTube;
 
     if (is_set(ctx.builder.getFlags(), SceneBuilder::Flags::TessellateCurvesIntoPolyTubes))
     {

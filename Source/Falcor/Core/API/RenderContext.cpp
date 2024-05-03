@@ -664,6 +664,7 @@ gfx::IRenderCommandEncoder* RenderContext::drawCallCommon(GraphicsState* pState,
             auto vertexBuffer = pVao->getVertexBuffer(i).get();
             resourceBarrier(vertexBuffer, Resource::State::VertexBuffer);
         }
+        // printf("pVao->getVertexBuffersCount %d\n", pVao->getVertexBuffersCount());
         if (pVao->getIndexBuffer())
         {
             auto indexBuffer = pVao->getIndexBuffer().get();

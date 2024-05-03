@@ -103,6 +103,8 @@ VSOut defaultVS(VSIn vIn)
     return vOut;
 }
 
+
+
 /** Setup vertex data based on interpolated vertex attributes.
     \param[in] vsOut Interpolated vertex attributes.
     \param[in] faceNormalW Face normal in world space (normalized).
@@ -145,4 +147,52 @@ bool alphaTest<L:ITextureSampler>(VSOut vsOut, uint triangleIndex, L lod)
     float3 faceNormal = gScene.getFaceNormalW(vsOut.instanceID, triangleIndex);
     VertexData v = prepareVertexData(vsOut, faceNormal);
     return gScene.materials.alphaTest(v, vsOut.materialID, lod);
+}
+
+struct VSShadowOut
+{
+    INTERPOLATION_MODE float3 normalW : NORMAL;    ///< Shading normal in world space (not normalized!).
+    INTERPOLATION_MODE float4 tangentW : TANGENT;  ///< Shading tangent in world space (not normalized!).
+    INTERPOLATION_MODE float2 texC : TEXCRD;       ///< Texture coordinate.
+    INTERPOLATION_MODE float3 posW : POSW;         ///< Position in world space.
+    INTERPOLATION_MODE float4 prevPosH : PREVPOSH; ///< Position in clip space for the previous frame.
+
+    // Per-triangle data
+    nointerpolation GeometryInstanceID instanceID : INSTANCE_ID; ///< Geometry instance ID.
+    nointerpolation uint materialID : MATERIAL_ID;               ///< Material ID.
+
+    float4 posH : SV_POSITION;
+    float3 depth;
+};
+
+VSShadowOut defaultVSShadow(VSIn vIn)
+{
+    VSShadowOut vOut;
+    const GeometryInstanceID instanceID = { vIn.instanceID };
+
+    float4x4 worldMat = gScene.getWorldMatrix(instanceID);
+    float3 posW = mul(worldMat, float4(vIn.pos, 1.f)).xyz;
+    vOut.posW = posW;
+    vOut.posH = mul(gScene.camera.getViewProj(), float4(posW, 1.f));
+
+    vOut.instanceID = instanceID;
+    vOut.materialID = gScene.getMaterialID(instanceID);
+
+    vOut.texC = vIn.texC;
+    vOut.normalW = mul(gScene.getInverseTransposeWorldMatrix(instanceID), vIn.unpack().normal);
+    float4 tangent = vIn.unpack().tangent;
+    vOut.tangentW = float4(mul((float3x3)gScene.getWorldMatrix(instanceID), tangent.xyz), tangent.w);
+
+    // Compute the vertex position in the previous frame.
+    float3 prevPos = vIn.pos;
+    GeometryInstanceData instance = gScene.getGeometryInstance(instanceID);
+    if (instance.isDynamic())
+    {
+        uint prevVertexIndex = gScene.meshes[instance.geometryID].prevVbOffset + vIn.vertexID;
+        prevPos = gScene.prevVertices[prevVertexIndex].position;
+    }
+    float3 prevPosW = mul(gScene.getPrevWorldMatrix(instanceID), float4(prevPos, 1.f)).xyz;
+    vOut.prevPosH = mul(gScene.camera.data.prevViewProjMatNoJitter, float4(prevPosW, 1.f));
+
+    return vOut;
 }

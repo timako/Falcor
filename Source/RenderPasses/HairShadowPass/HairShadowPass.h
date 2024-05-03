@@ -72,8 +72,9 @@ public:
     virtual bool onKeyEvent(const KeyboardEvent& keyEvent) override { return false; }
 
     void setLight(ref<Light> pLight);
-    void GenerateShadowPass(const Camera* pCamera);
-
+    void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP);
+    void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP);
+    void GenerateShadowPass(const Camera* pCamera, float aspect);
 private:
 
     ref<Scene> mpScene;
@@ -100,4 +101,6 @@ private:
 
     HSPData mHSPData;
 
+    float3 mLightPos;
+    float4x4 mLightVP;
 };
