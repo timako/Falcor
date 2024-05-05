@@ -31,6 +31,7 @@ import Scene.Material.BasicMaterialData;
 
 /** Implementation of Falcor's standard hair/fur material.
  */
+
 struct HairMaterial : MaterialBase, IMaterial
 {
     BasicMaterialData data;

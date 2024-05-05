@@ -58,6 +58,29 @@ struct Camera
         return ray;
     }
 
+    Ray computeRayPinholeWithGivenJitter(uint2 pixel, uint2 frameDim, float2 jitter)
+    {
+        Ray ray;
+
+        // Compute the normalized ray direction assuming a pinhole camera.
+        ray.origin = data.posW;
+
+        float2 p = ((pixel + float2(0.5f, 0.5f)) + jitter) / frameDim;
+
+        float2 ndc = float2(2, -2) * p + float2(-1, 1);
+
+        // Compute the non-normalized ray direction assuming a pinhole camera.
+        float3 dirNotNormalized = ndc.x * data.cameraU + ndc.y * data.cameraV + data.cameraW;
+
+        ray.dir = normalize(dirNotNormalized);
+
+        float invCos = 1.f / dot(normalize(data.cameraW), ray.dir);
+        ray.tMin = data.nearZ * invCos;
+        ray.tMax = data.farZ * invCos;
+
+        return ray;
+    }
+
     /** Computes a camera ray for a given pixel assuming a pinhole camera model.
         The camera jitter is taken into account to compute the sample position on the image plane.
         \param[in] pixel Pixel coordinates with origin in top-left.

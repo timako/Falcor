@@ -36,7 +36,7 @@ namespace {
 
     const ChannelList kInputChannels = {
         // clang-format off
-        { "Shadowmap",        "gShadowmap",     "Shadowmap of main light" },
+        { "Shadowmap",        "gShadowmap",     "Shadowmap of main light", true /* optional */, ResourceFormat::RGBA32Float },
         // clang-format on
     };
     const ChannelList kVBufferExtraChannels = {
@@ -107,10 +107,10 @@ float4 ComputeDeepShadowLayerDepths(const float LayerDistribution)
 {
     float Exponent = std::clamp(LayerDistribution, (float)0.0, (float)1.0) * 5.2f + 1.0f;
     float4 depths;
-    depths.x = std::pow(2.0f, Exponent);
-    depths.y = std::pow(3.0f, Exponent);
-    depths.z = std::pow(3.5f, Exponent);
-    depths.w = std::pow(4.0f, Exponent);
+    depths.x = 0.80f;
+    depths.y = 0.84f;
+    depths.z = 0.88f;
+    depths.w = 0.92f;
     return depths;
 }
 
@@ -140,12 +140,32 @@ RenderPassReflection DeepOpacityMapPass::reflect(const CompileData& compileData)
     return reflector;
 }
 
+ref<Texture> DeepOpacityMapPass::getOutput(const RenderData& renderData, const std::string& name)
+{
+    // This helper fetches the render pass output with the given name and verifies it has the correct size.
+    FALCOR_ASSERT(mFrameDim.x > 0 && mFrameDim.y > 0);
+    auto pTex = renderData.getTexture(name);
+    if (pTex)
+    {
+        // FALCOR_THROW("GBufferBase: Pass output '{}' has mismatching size. All outputs must be of the same size.", name);
+    }
+    return pTex;
+}
+
+
 void DeepOpacityMapPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
+    auto& dict = renderData.getDictionary();
+    if (mOptionsChanged)
+    {
+        auto flags = dict.getValue(kRenderPassRefreshFlags, RenderPassRefreshFlags::None);
+        dict[Falcor::kRenderPassRefreshFlags] = flags | Falcor::RenderPassRefreshFlags::RenderOptionsChanged;
+        mOptionsChanged = false;
+    }
     auto pOutput = renderData.getTexture(kShaderName); // get output texture pointer
     FALCOR_ASSERT(pOutput);
 
-    auto pTex = renderData.getTexture("output");
+    auto pTex = renderData.getTexture(kShaderName);
     mpFbo->attachColorTarget(pTex, uint32_t(0));
     const float4 clearColor(0, 0, 0, 1);
     pRenderContext->clearFbo(mpFbo.get(), clearColor, 1.0f, 0, FboAttachmentType::All);
@@ -158,11 +178,44 @@ void DeepOpacityMapPass::execute(RenderContext* pRenderContext, const RenderData
         mpVars->getRootVar()["PerFrameCB"]["ShadowVP"] = mLightVP;
         mpVars->getRootVar()["PerFrameCB"]["lightPos"] = mLightPos;
         mpVars->getRootVar()["PerFrameCB"]["_DeepShadowLayerSplit"] = ComputeDeepShadowLayerDepths(_LayerDistribution);
+        mpVars->getRootVar()["PerFrameCB"]["depthControl"] = mDepthToHair;
+        for (const auto& channel : kVBufferExtraChannels)
+        {
+            ref<Texture> pTexExtra = getOutput(renderData, channel.name);
+            mpVars->getRootVar()[channel.texname] = pTexExtra;
+        }
+
+        if(mpProgram != nullptr){
+            mpProgram->addDefines(getValidResourceDefines(kInputChannels, renderData));
+            mpProgram->addDefines(getValidResourceDefines(kVBufferExtraChannels, renderData));
+            auto bind = [&](const ChannelDesc& desc)
+            {
+                if (!desc.texname.empty())
+                {
+                    mpVars->getRootVar()[desc.texname] = renderData.getTexture(desc.name);
+                }
+            };
+            for (auto channel : kInputChannels)
+                bind(channel);
+        }
+
+
         mpScene->rasterize(pRenderContext, mpGraphicsState.get(), mpVars.get(), mpRasterState, mpRasterState);
     }
 }
 
-void DeepOpacityMapPass::renderUI(Gui::Widgets& widget) {}
+void DeepOpacityMapPass::renderUI(Gui::Widgets& widget) {
+    bool dirty = false;
+    dirty |= widget.var("depth control", mDepthToHair, 0.8f, 1.2f, 0.04f, false, "%.2f");
+    widget.tooltip("depth control", true);
+
+    // If rendering options that modify the output have changed, set flag to indicate that.
+    // In execute() we will pass the flag to other passes for reset of temporal data etc.
+    if (dirty)
+    {
+        mOptionsChanged = true;
+    }
+}
 
 void DeepOpacityMapPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene) {
     mpScene = pScene;

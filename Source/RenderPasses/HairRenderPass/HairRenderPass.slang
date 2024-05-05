@@ -37,6 +37,7 @@ RWTexture2D<float2> gMotionVector;
 RWTexture2D<float4> gViewW;
 RWTexture2D<uint> gTime;
 RWTexture2D<float> gMask;
+Texture2D<float3> gNp_tex;
 
 
 

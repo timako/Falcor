@@ -74,6 +74,7 @@ public:
     void createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP);
     void createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP);
     void GenerateShadowPass(const Camera* pCamera, float aspect);
+    ref<Texture> getOutput(const RenderData& renderData, const std::string& name);
 private:
 
     ref<Scene> mpScene;
@@ -102,4 +103,7 @@ private:
 
     float3 mLightPos;
     float4x4 mLightVP;
+
+    float mDepthToHair = 1.0f;
+    bool mOptionsChanged;
 };

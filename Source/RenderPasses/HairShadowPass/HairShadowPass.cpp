@@ -26,7 +26,8 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
 #include "HairShadowPass.h"
-
+#include "RenderGraph/RenderPassHelpers.h"
+#include "RenderGraph/RenderPassStandardFlags.h"
 
 namespace {
     const char kShaderFile[] = "RenderPasses/HairShadowPass/HairShadowPass.3d.slang";
@@ -110,7 +111,12 @@ RenderPassReflection HairShadowPass::reflect(const CompileData& compileData)
 {
     // Define the required resources here
     RenderPassReflection reflector;
-    reflector.addOutput(kShaderName, "Wireframe view texture");
+    const uint2 sz = RenderPassHelpers::calculateIOSize(mOutputSizeSelection, mFixedOutputSize, compileData.defaultTexDims);
+
+    reflector.addOutput(kShaderName, "Shadow map buffer")
+        .format(ResourceFormat::RGBA32Float)
+        .bindFlags(ResourceBindFlags::RenderTarget | ResourceBindFlags::UnorderedAccess)
+        .texture2D(sz.x, sz.y);
     return reflector;
 }
 

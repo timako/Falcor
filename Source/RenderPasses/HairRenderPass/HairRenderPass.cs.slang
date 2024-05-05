@@ -1,5 +1,5 @@
 import Scene.RaytracingInline;
-import CurveShadowPass;
+import HairRenderPass;
 
 ConstantBuffer<VBufferRT> gVBufferRT;
 

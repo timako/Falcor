@@ -25,16 +25,23 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
-#include "CurveShadowPass.h"
+#include "HairRenderPass.h"
+#include "HairMaterial.h"
 #include "Scene/HitInfo.h"
 #include "RenderGraph/RenderPassStandardFlags.h"
 #include "RenderGraph/RenderPassHelpers.h"
 
 namespace
 {
-const std::string kProgramComputeFile = "RenderPasses/CurveShadowPass/CurveShadowPass.cs.slang";
+const std::string kProgramComputeFile = "RenderPasses/HairRenderPass/HairRenderPass.cs.slang";
 const std::string kShadowBufferName = "Shadow map";
 const std::string kShadowBufferDesc = "Shadow map visulization";
+
+const ChannelList kInputChannels = {
+    // clang-format off
+    { "DOMmap",        "gDOMmap",     "Shadowmap of main light", true /* optional */, ResourceFormat::RGBA32Float },
+    // clang-format on
+};
 
 const ChannelList kVBufferExtraChannels = {
     // clang-format off
@@ -50,10 +57,10 @@ const ChannelList kVBufferExtraChannels = {
 
 extern "C" FALCOR_API_EXPORT void registerPlugin(Falcor::PluginRegistry& registry)
 {
-    registry.registerClass<RenderPass, CurveShadowPass>();
+    registry.registerClass<RenderPass, HairRenderPass>();
 }
 
-void CurveShadowPass::setLight(ref<Light> pLight)
+void HairRenderPass::setLight(ref<Light> pLight)
 {
     if(pLight){
         mpLight = pLight;
@@ -61,7 +68,7 @@ void CurveShadowPass::setLight(ref<Light> pLight)
 
 }
 
-void CurveShadowPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
+void HairRenderPass::createShadowMatrix(const PointLight* pLight, const float3 center, float radius, float fboAspectRatio, float4x4& shadowVP){
     const float3 lightPos = pLight->getWorldPosition();
     mLightPos = lightPos;
     const float3 lookat = center; // 点光源定义direction 可以换成center ?
@@ -85,7 +92,7 @@ void CurveShadowPass::createShadowMatrix(const PointLight* pLight, const float3 
 
 }
 
-void CurveShadowPass::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
+void HairRenderPass::createShadowMatrix(const Light* pLight, const float3& center, float radius, float fboAspectRatio, float4x4& shadowVP)
 {
     if(pLight->getType() == LightType::Point){
         PointLight* ppLight = (PointLight*)pLight;
@@ -95,7 +102,7 @@ void CurveShadowPass::createShadowMatrix(const Light* pLight, const float3& cent
 }
 
 
-void CurveShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
+void HairRenderPass::GenerateShadowPass(const Camera* pCamera, float aspect){
     AABB mpSceneBB = mpScene->getSceneBounds();
     const float3 center((mpSceneBB.minPoint.x + mpSceneBB.maxPoint.x)/2,
                         (mpSceneBB.minPoint.y + mpSceneBB.maxPoint.y)/2,
@@ -106,16 +113,26 @@ void CurveShadowPass::GenerateShadowPass(const Camera* pCamera, float aspect){
     createShadowMatrix(mpLight.get(), center, radius, aspect, mLightVP);
 }
 
-CurveShadowPass::CurveShadowPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
+HairRenderPass::HairRenderPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     mpSampleGenerator = SampleGenerator::create(mpDevice, SAMPLE_GENERATOR_DEFAULT);
+
+    Np_tex = pDevice->createTexture2D(
+            AZIMUTHAL_PRECOMPUTE_RESOLUTION,
+            AZIMUTHAL_PRECOMPUTE_RESOLUTION * 3,
+            ResourceFormat::RGB32Float,
+            1,
+            1,
+            mHairBSDF.Np_table,
+            ResourceBindFlags::ShaderResource
+        );
 }
 
-Properties CurveShadowPass::getProperties() const
+Properties HairRenderPass::getProperties() const
 {
     return {};
 }
 
-RenderPassReflection CurveShadowPass::reflect(const CompileData& compileData)
+RenderPassReflection HairRenderPass::reflect(const CompileData& compileData)
 {
     RenderPassReflection reflector;
     const uint2 sz = RenderPassHelpers::calculateIOSize(mOutputSizeSelection, mFixedOutputSize, compileData.defaultTexDims);
@@ -131,7 +148,7 @@ RenderPassReflection CurveShadowPass::reflect(const CompileData& compileData)
     return reflector;
 }
 
-void CurveShadowPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
+void HairRenderPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
     auto pOutput = renderData.getTexture(kShadowBufferName); // get output texture pointer
     FALCOR_ASSERT(pOutput);
@@ -153,7 +170,7 @@ void CurveShadowPass::execute(RenderContext* pRenderContext, const RenderData& r
     mFrameCount ++;
 }
 
-void CurveShadowPass::executeCompute(RenderContext* pRenderContext, const RenderData& renderData){
+void HairRenderPass::executeCompute(RenderContext* pRenderContext, const RenderData& renderData){
     if (!mpComputePass)
     {
         ProgramDesc desc;
@@ -181,7 +198,7 @@ void CurveShadowPass::executeCompute(RenderContext* pRenderContext, const Render
     mpComputePass->execute(pRenderContext, uint3(mFrameDim, 1));
 }
 
-DefineList CurveShadowPass::getShaderDefines(const RenderData& renderData)
+DefineList HairRenderPass::getShaderDefines(const RenderData& renderData)
 {
     DefineList defines;
     // For optional I/O resources, set 'is_valid_<name>' defines to inform the program of which ones it can access.
@@ -190,20 +207,22 @@ DefineList CurveShadowPass::getShaderDefines(const RenderData& renderData)
     return defines;
 }
 
-void CurveShadowPass::renderUI(Gui::Widgets& widget) {}
+void HairRenderPass::renderUI(Gui::Widgets& widget) {}
 
-void CurveShadowPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene){
+void HairRenderPass::setScene(RenderContext* pRenderContext, const ref<Scene>& pScene){
     mpScene = pScene;
 
     setLight(mpScene && mpScene->getLightCount() ? mpScene->getLight(0) : nullptr);
+
+
 }
 
-void CurveShadowPass::recreatePrograms()
+void HairRenderPass::recreatePrograms()
 {
     mpComputePass = nullptr;
 }
 
-void CurveShadowPass::updateFrameDim(const uint2 frameDim)
+void HairRenderPass::updateFrameDim(const uint2 frameDim)
 {
     FALCOR_ASSERT(frameDim.x > 0 && frameDim.y > 0);
     mFrameDim = frameDim;
@@ -219,7 +238,7 @@ ref<Texture> getOutput(const RenderData& renderData, const std::string& name)
 }
 
 
-void CurveShadowPass::bindShaderData(const ShaderVar& var, const RenderData& renderData)
+void HairRenderPass::bindShaderData(const ShaderVar& var, const RenderData& renderData)
 {
     var["gVBufferRT"]["frameDim"] = mFrameDim;
     var["gVBufferRT"]["frameCount"] = mFrameCount;
@@ -231,6 +250,7 @@ void CurveShadowPass::bindShaderData(const ShaderVar& var, const RenderData& ren
     var["gVBufferRT"]["lightPos"] = mLightPos;
     // Bind resources.
     var["gVBuffer"] = getOutput(renderData, kShadowBufferName);
+    var["gNp_tex"] = Np_tex;
 
     auto bind = [&](const ChannelDesc& channel)
     {
