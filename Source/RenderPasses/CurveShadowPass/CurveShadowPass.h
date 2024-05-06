@@ -79,7 +79,7 @@ private:
     float2 mInvFrameDim = {};
     uint32_t mFrameCount = 0;
     float3 mLightPos;
-    ResourceFormat mVBufferFormat = HitInfo::kDefaultFormat;
+    ResourceFormat mVBufferFormat = ResourceFormat::RGBA32Uint;
     RenderPassHelpers::IOSize mOutputSizeSelection = RenderPassHelpers::IOSize::Default;
     /// Output size in pixels when 'Fixed' size is selected.
     uint2 mFixedOutputSize = {512, 512};

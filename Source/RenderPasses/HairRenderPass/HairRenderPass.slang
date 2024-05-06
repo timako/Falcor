@@ -31,7 +31,7 @@ __exported import Utils.Math.Ray;
 import Utils.Math.MathHelpers;
 import Utils.Sampling.SampleGenerator;
 
-RWTexture2D<uint4> gVBuffer;
+RWTexture2D<float4> gVBuffer;
 RWTexture2D<float> gDepth;
 RWTexture2D<float2> gMotionVector;
 RWTexture2D<float4> gViewW;
@@ -39,7 +39,8 @@ RWTexture2D<uint> gTime;
 RWTexture2D<float> gMask;
 Texture2D<float3> gNp_tex;
 
-
+Texture2D<float4> gDOMmap;
+Texture2D<uint4> gVBuffermap;
 
 #define is_valid_gDepth 1
 #define is_valid_gMotionVector 1
@@ -49,8 +50,87 @@ Texture2D<float3> gNp_tex;
 
 #define is_valid(name) (is_valid_##name != 0)
 
+struct HairRenderAsset {
+    uint2 frameDim;
+    uint frameCount;
+    float4x4 ShadowVP;
+    float3 lightPos;
+
+    static const float4 colors[5] = {
+        float4(0.0, 0.0, 0.0, 1.0), // 黑色
+        float4(0.0, 1.0, 0.0, 1.0), // 绿色
+        float4(0.0, 0.0, 1.0, 1.0), // 蓝色
+        float4(1.0, 1.0, 0.0, 1.0), // 黄色
+        float4(1.0, 0.0, 1.0, 1.0)  // 紫色
+    };
+
+    uint unpackData(uint data, out uint count) {
+        count = (data >> 29) & 0x7;
+        return data & 0x1FFFFFFF;
+    }
+    void beginTime(inout GpuTimer timer)
+    {
+        if (is_valid(gTime))
+            timer.start();
+    }
+
+    void endTime(uint2 pixel, inout GpuTimer timer)
+    {
+        if (is_valid(gTime))
+            gTime[pixel] = timer.getElapsed();
+    }
+
+    Ray generateRay(uint2 pixel)
+    {
+        return gScene.camera.computeRayPinhole(pixel, frameDim);
+    }
+
+    void visualizeHair(uint2 pixel) {
+        uint type = 0;
+        uint count;
+        if (gVBuffermap[pixel].x != 0) {
+            type += 1;
+        }
+        if (gVBuffermap[pixel].y != 0) {
+            type += 1;
+        }
+        if (gVBuffermap[pixel].z != 0) {
+            type += 1;
+        }
+        if (gVBuffermap[pixel].w != 0) {
+            type += 1;
+        }
+        gVBuffer[pixel] = colors[type];
+    }
+
+    void RenderHair(uint2 pixel)
+    {
+        uint prims[4] = { 0, 0, 0, 0 };
+        uint counts[4] = { 0, 0, 0, 0 };
+        uint count;
+        if (gVBuffermap[pixel].x != 0) {
+            prims[0] = unpackData(gVBuffermap[pixel].x, count);
+            counts[0] = count;
+        }
+        if (gVBuffermap[pixel].y != 0) {
+            prims[1] = unpackData(gVBuffermap[pixel].y, count);
+            counts[1] = count;
+        }
+        if (gVBuffermap[pixel].z != 0) {
+            prims[2] = unpackData(gVBuffermap[pixel].z, count);
+            counts[2] = count;
+        }
+        if (gVBuffermap[pixel].w != 0) {
+            prims[3] = unpackData(gVBuffermap[pixel].w, count);
+            counts[3] = count;
+        }
+        uint total = counts[0] + counts[1] + counts[2] + counts[3];
+        
+        Ray ray = generateRay(pixel);
 
 
+    }
+}
 struct VBufferRT
 {
     static const bool kComputeDepthOfField = true;
@@ -127,13 +207,13 @@ struct VBufferRT
             GeometryInstanceID instanceID = triangleHit.instanceID;
             uint primitiveIndex = triangleHit.primitiveIndex;
 
-            if (!tryUpdateChannel(gVBuffer[pixel].x, primitiveIndex)) {
-                if (!tryUpdateChannel(gVBuffer[pixel].y, primitiveIndex)) {
-                    if (!tryUpdateChannel(gVBuffer[pixel].z, primitiveIndex)) {
-                        tryUpdateChannel(gVBuffer[pixel].w, primitiveIndex);
-                    }
-                }
-            }
+            // if (!tryUpdateChannel(gVBuffer[pixel].x, primitiveIndex)) {
+            //     if (!tryUpdateChannel(gVBuffer[pixel].y, primitiveIndex)) {
+            //         if (!tryUpdateChannel(gVBuffer[pixel].z, primitiveIndex)) {
+            //             tryUpdateChannel(gVBuffer[pixel].w, primitiveIndex);
+            //         }
+            //     }
+            // }
 
             v = gScene.getVertexData(triangleHit);
             prevPosW = gScene.getPrevPosW(triangleHit);
@@ -182,7 +262,7 @@ struct VBufferRT
 
     void writeMiss(uint2 pixel, float3 rayOrigin, float3 rayDir)
     {
-        gVBuffer[pixel] = {};
+        // gVBuffer[pixel] = {};
 
         if (is_valid(gDepth))
             gDepth[pixel] = 1.f;
@@ -199,15 +279,5 @@ struct VBufferRT
             gViewW[pixel] = float4(-ray.dir, 0.f);
     }
 
-    void beginTime(inout GpuTimer timer)
-    {
-        if (is_valid(gTime))
-            timer.start();
-    }
 
-    void endTime(uint2 pixel, inout GpuTimer timer)
-    {
-        if (is_valid(gTime))
-            gTime[pixel] = timer.getElapsed();
-    }
 };

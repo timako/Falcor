@@ -39,7 +39,8 @@ const std::string kShadowBufferDesc = "Shadow map visulization";
 
 const ChannelList kInputChannels = {
     // clang-format off
-    { "DOMmap",        "gDOMmap",     "Shadowmap of main light", true /* optional */, ResourceFormat::RGBA32Float },
+    { "DOM map",        "gDOMmap",     "DOM map of main light", true /* optional */, ResourceFormat::RGBA32Float },
+    { "Visibility map",        "gVBuffermap",     "Shadowmap of main light", true /* optional */, ResourceFormat::RGBA32Uint },
     // clang-format on
 };
 
@@ -135,6 +136,9 @@ Properties HairRenderPass::getProperties() const
 RenderPassReflection HairRenderPass::reflect(const CompileData& compileData)
 {
     RenderPassReflection reflector;
+
+    addRenderPassInputs(reflector, kInputChannels);
+
     const uint2 sz = RenderPassHelpers::calculateIOSize(mOutputSizeSelection, mFixedOutputSize, compileData.defaultTexDims);
 
     // Define the required resources here
@@ -191,6 +195,7 @@ void HairRenderPass::executeCompute(RenderContext* pRenderContext, const RenderD
     }
 
     mpComputePass->getProgram()->addDefines(getShaderDefines(renderData));
+    mpComputePass->getProgram()->addDefines(getValidResourceDefines(kInputChannels, renderData));
 
     ShaderVar var = mpComputePass->getRootVar();
     bindShaderData(var, renderData);
@@ -243,7 +248,12 @@ void HairRenderPass::bindShaderData(const ShaderVar& var, const RenderData& rend
     var["gVBufferRT"]["frameDim"] = mFrameDim;
     var["gVBufferRT"]["frameCount"] = mFrameCount;
 
+    var["HairRenderAsset"]["frameDim"] = mFrameDim;
+    var["HairRenderAsset"]["frameCount"] = mFrameCount;
+
     // Camera lightCamera("lightCamera");
+    var["gVBufferRT"]["ShadowVP"] = mLightVP;
+    var["gVBufferRT"]["lightPos"] = mLightPos;
 
 
     var["gVBufferRT"]["ShadowVP"] = mLightVP;
@@ -257,6 +267,8 @@ void HairRenderPass::bindShaderData(const ShaderVar& var, const RenderData& rend
         ref<Texture> pTex = getOutput(renderData, channel.name);
         var[channel.texname] = pTex;
     };
+    for (const auto& channel : kInputChannels)
+        bind(channel);
     for (const auto& channel : kVBufferExtraChannels)
         bind(channel);
 

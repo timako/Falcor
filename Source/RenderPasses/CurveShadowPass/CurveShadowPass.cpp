@@ -43,6 +43,11 @@ const ChannelList kVBufferExtraChannels = {
     { "viewW",          "gViewW",           "View direction in world space",    true /* optional */, ResourceFormat::RGBA32Float }, // TODO: Switch to packed 2x16-bit snorm format.
     { "time",           "gTime",            "Per-pixel execution time",         true /* optional */, ResourceFormat::R32Uint     },
     { "mask",           "gMask",            "Mask",                             true /* optional */, ResourceFormat::R32Float    },
+
+    { "VBuffer2",       "gVBuffer2",        "VBuffer for 2nd sample",           true /* optional */, ResourceFormat::RGBA32Uint  },
+    { "VBuffer3",       "gVBuffer3",        "VBuffer for 3rd sample",           true /* optional */, ResourceFormat::RGBA32Uint  },
+    { "VBuffer4",       "gVBuffer4",        "VBuffer for 4th sample",           true /* optional */, ResourceFormat::RGBA32Uint  },
+    { "HitCount",       "gHitCount",        "Per-pixel HitCount",               true /* optional */, ResourceFormat::R32Uint     }
     // clang-format on
 };
 
