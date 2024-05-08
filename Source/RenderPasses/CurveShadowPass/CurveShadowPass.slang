@@ -198,6 +198,11 @@ struct VBufferRT
             const TriangleHit triangleHit = hit.getTriangleHit();
             GeometryInstanceID instanceID = triangleHit.instanceID;
             uint primitiveIndex = triangleHit.primitiveIndex;
+            float3 barycoords = triangleHit.getBarycentricWeights();
+
+
+
+
 
             // if (!tryUpdateChannel(gVBuffer[pixel].x, primitiveIndex, pixel, 0)) {
             //     if (!tryUpdateChannel(gVBuffer[pixel].y, primitiveIndex, pixel, 1)) {
@@ -224,6 +229,15 @@ struct VBufferRT
             // uint4 data = uint4(primitiveIndex, primitiveIndex, primitiveIndex, 1);
 
             uint4 data = hit.getData();
+
+            HitInfo hitRebuild = HitInfo(data);
+            const TriangleHit triangleHitRebuild = hitRebuild.getTriangleHit();
+            GeometryInstanceID instanceIDRebuild = triangleHitRebuild.instanceID;
+            uint primitiveIndexRebuild = triangleHitRebuild.primitiveIndex;
+            float3 barycoordsRebuild = triangleHitRebuild.getBarycentricWeights();
+
+
+
             if (!tryUpdateBuffer(gVBuffer[pixel], data, pixel, 0)) {
                 if (!tryUpdateBuffer(gVBuffer2[pixel], data, pixel, 1)) {
                     if (!tryUpdateBuffer(gVBuffer3[pixel], data, pixel, 2)) {
@@ -231,6 +245,13 @@ struct VBufferRT
                     }
                 }
             }
+
+            HitInfo gitFromTexture = HitInfo(gVBuffer[pixel]);
+            const TriangleHit triangleHitFromTexture = gitFromTexture.getTriangleHit();
+            GeometryInstanceID instanceIDFromTexture = triangleHitFromTexture.instanceID;
+            uint primitiveIndexFromTexture = triangleHitFromTexture.primitiveIndex;
+            float3 barycoordsFromTexture = triangleHitFromTexture.getBarycentricWeights();
+            gViewW[pixel] = float4(barycoordsFromTexture, 1.0);
 
 
 
@@ -277,19 +298,19 @@ struct VBufferRT
         // if (is_valid(gViewW))
         //     gViewW[pixel] = float4(-ray.dir, 0.f);
 
-        uint count = 0;
+        // uint count = 0;
         // if (gVBuffer[pixel].x != 0) count++;
         // if (gVBuffer[pixel].y != 0) count++;
         // if (gVBuffer[pixel].z != 0) count++;
         // if (gVBuffer[pixel].w != 0) count++;
         // gViewW[pixel] = colors[count];
 
-        count += gHitCount[pixel] & 0xF;
-        count += (gHitCount[pixel] >> 4) & 0xF;
-        count += (gHitCount[pixel] >> 8) & 0xF;
-        count += (gHitCount[pixel] >> 12) & 0xF;
+        // count += gHitCount[pixel] & 0xF;
+        // count += (gHitCount[pixel] >> 4) & 0xF;
+        // count += (gHitCount[pixel] >> 8) & 0xF;
+        // count += (gHitCount[pixel] >> 12) & 0xF;
 
-        gViewW[pixel] = colors[count];
+        // gViewW[pixel] = colors[count];
 
     }
 

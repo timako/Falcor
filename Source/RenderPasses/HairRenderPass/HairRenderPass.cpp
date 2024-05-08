@@ -39,8 +39,12 @@ const std::string kShadowBufferDesc = "Shadow map visulization";
 
 const ChannelList kInputChannels = {
     // clang-format off
-    { "DOM map",        "gDOMmap",     "DOM map of main light", true /* optional */, ResourceFormat::RGBA32Float },
-    { "Visibility map",        "gVBuffermap",     "Shadowmap of main light", true /* optional */, ResourceFormat::RGBA32Uint },
+    { "DOM map",            "gDOMmap",          "DOM map of main light",    true /* optional */, ResourceFormat::RGBA32Float    },
+    { "Visibility map",     "gVBuffermap",      "Visibility map",           true /* optional */, ResourceFormat::RGBA32Uint     },
+    { "Visibility map2",    "gVBuffermap2",     "Visibility map 2",         true /* optional */, ResourceFormat::RGBA32Uint     },
+    { "Visibility map3",    "gVBuffermap3",     "Visibility map 3",         true /* optional */, ResourceFormat::RGBA32Uint     },
+    { "Visibility map4",    "gVBuffermap4",     "Visibility map 4",         true /* optional */, ResourceFormat::RGBA32Uint     },
+    { "Hit Count",          "gHitCount",        "Hit Count for 4 VBuffers", true /* optional */, ResourceFormat::R32Uint        },
     // clang-format on
 };
 
@@ -116,10 +120,16 @@ void HairRenderPass::GenerateShadowPass(const Camera* pCamera, float aspect){
 
 HairRenderPass::HairRenderPass(ref<Device> pDevice, const Properties& props) : RenderPass(pDevice) {
     mpSampleGenerator = SampleGenerator::create(mpDevice, SAMPLE_GENERATOR_DEFAULT);
+    // for(int i = 0; i < AZIMUTHAL_PRECOMPUTE_RESOLUTION; i++){
+    //     for( int j = 0; j < AZIMUTHAL_PRECOMPUTE_RESOLUTION * 3; j++){
+    //         printf("(%f, %f, %f )", mHairBSDF.Np_table[i][j].x, mHairBSDF.Np_table[i][j].y, mHairBSDF.Np_table[i][j].z);
+    //     }
+    // }
+
 
     Np_tex = pDevice->createTexture2D(
-            AZIMUTHAL_PRECOMPUTE_RESOLUTION,
             AZIMUTHAL_PRECOMPUTE_RESOLUTION * 3,
+            AZIMUTHAL_PRECOMPUTE_RESOLUTION,
             ResourceFormat::RGB32Float,
             1,
             1,
@@ -144,7 +154,7 @@ RenderPassReflection HairRenderPass::reflect(const CompileData& compileData)
     // Define the required resources here
     reflector.addOutput(kShadowBufferName, kShadowBufferDesc)
     .bindFlags(ResourceBindFlags::UnorderedAccess)
-    .format(mVBufferFormat)
+    .format(ResourceFormat::RGBA32Float)
     .texture2D(sz.x, sz.y);
 
     addRenderPassOutputs(reflector, kVBufferExtraChannels, ResourceBindFlags::UnorderedAccess, sz);
@@ -245,19 +255,13 @@ ref<Texture> getOutput(const RenderData& renderData, const std::string& name)
 
 void HairRenderPass::bindShaderData(const ShaderVar& var, const RenderData& renderData)
 {
-    var["gVBufferRT"]["frameDim"] = mFrameDim;
-    var["gVBufferRT"]["frameCount"] = mFrameCount;
 
-    var["HairRenderAsset"]["frameDim"] = mFrameDim;
-    var["HairRenderAsset"]["frameCount"] = mFrameCount;
-
-    // Camera lightCamera("lightCamera");
-    var["gVBufferRT"]["ShadowVP"] = mLightVP;
-    var["gVBufferRT"]["lightPos"] = mLightPos;
+    var["gHairRenderAsset"]["frameDim"] = mFrameDim;
+    var["gHairRenderAsset"]["frameCount"] = mFrameCount;
 
 
-    var["gVBufferRT"]["ShadowVP"] = mLightVP;
-    var["gVBufferRT"]["lightPos"] = mLightPos;
+    var["gHairRenderAsset"]["ShadowVP"] = mLightVP;
+    var["gHairRenderAsset"]["lightPos"] = mLightPos;
     // Bind resources.
     var["gVBuffer"] = getOutput(renderData, kShadowBufferName);
     var["gNp_tex"] = Np_tex;

@@ -207,13 +207,13 @@ struct HairBSDF
     HairBSDF::HairBSDF()
     {
         m_eta = 1.55f;
-        m_beta = 2.2f;
-        m_absorption = float3(0.5f, 0.5f, 0.5f);
+        m_beta = 7.5f;
+        m_absorption =  float3(0.3, 0.6, 0.9);
         m_beta = degToRad(m_beta);
         beta[0] = m_beta;
         beta[1] = m_beta / 2;
         beta[2] = m_beta * 2;
-        m_alpha = 3.0f;
+        m_alpha = -5.0;
         m_alpha = degToRad(m_alpha);
         alpha[0] = m_alpha;
         alpha[1] = -m_alpha / 2;
@@ -232,13 +232,18 @@ struct HairBSDF
         {
             gamma_i_table[i] = asin(integrator._points[i]);
         }
+
+
         // precompute azimuthal scattering function from 2 dimension
         // cos(theta_d): [0, 1]
         // phi: [0, 2*PI]
+        //预计算 cos_theta_d: longitudinal方向
         for (int y = 0; y < AZIMUTHAL_PRECOMPUTE_RESOLUTION; y++)
         {
-            float cos_theta_d = float(y) / float(AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1);
+            // cos theta_d, sin theta_d
+            float cos_theta_d = std::clamp(float(y) / float(AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1) + float(0.00001), 0.0f, 1.0f);
             float sin_td = sqrt(1.f - cos_theta_d * cos_theta_d);
+            // eta_prime 是在azimuthal scattering方向的折射率分量
             float eta_prime = sqrt(m_eta * m_eta - sin_td * sin_td) / cos_theta_d;
             float cos_theta_t = sqrt(1.f - sin_td * sin_td * sqr(1.f / m_eta));
             float3 absorption_prime = m_absorption / cos_theta_t;
@@ -251,10 +256,16 @@ struct HairBSDF
                 gamma_t_table[k] = asin(std::clamp(integrator._points[k] / eta_prime, -1.f, 1.f));
                 absorption_table[k] = exp((-2.f * absorption_prime * (1.f + cos(2.f * gamma_t_table[k]))));
             }
+            FILE *out;
+            out = fopen( "D:/Debug/debug.txt", "w" );
+            if( out == NULL )
+                exit(1);
 
+            // 预计算Phi: azimuthal scattering方向
             for (int x = 0; x < AZIMUTHAL_PRECOMPUTE_RESOLUTION; x++)
             {
                 float phi = M_PI * 2.f * x / (AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1.f);
+
                 for (int i = 0; i < 3; i++)
                 {
                     float3 Np = float3(0.f);
@@ -269,13 +280,23 @@ struct HairBSDF
                         else
                         {
                             float3 T = absorption_table[j];
+                            // printf("T = %f %f %f\n", T.x, T.y, T.z);
                             float3 A = pow(T, i) * sqr(1.f - f) * float(pow(f, i - 1));
+
+                            fprintf(out, "pow(T, i)= %f %f %f when i = %d\n", pow(T, i).x, pow(T, i).y, pow(T, i).z, i);
+                            // fprintf(out, "A = %f %f %f when i = %d\n", A.x, A.y, A.z, i);
                             Np += A * float(0.5) * Dp * integrator._weights[j];
+                            // printf("Np: %f %f %f\n", Np.x, Np.y, Np.z);
+                            // printf("Np: %f %f %f when i = %d\n", Np.x, Np.y, Np.z, i);
                         }
+
                     }
+                    // fprintf(out, "Np: %f %f %f when i = %d, phi = %f \n", Np.x, Np.y, Np.z, i, phi);
                     Np_table[y][x * 3 + i] = Np;
                 }
             }
+            fclose(out);
+            exit(0);
         }
     }
 

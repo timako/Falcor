@@ -25,10 +25,12 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
+#include "Utils/Math/MathConstants.slangh"
 __exported import Scene.Shading;
 __exported import Utils.Timing.GpuTimer;
 __exported import Utils.Math.Ray;
 import Utils.Math.MathHelpers;
+
 import Utils.Sampling.SampleGenerator;
 
 RWTexture2D<float4> gVBuffer;
@@ -39,8 +41,12 @@ RWTexture2D<uint> gTime;
 RWTexture2D<float> gMask;
 Texture2D<float3> gNp_tex;
 
-Texture2D<float4> gDOMmap;
-Texture2D<uint4> gVBuffermap;
+RWTexture2D<uint> gHitCount;
+RWTexture2D<float4> gDOMmap;
+RWTexture2D<uint4> gVBuffermap;
+RWTexture2D<uint4> gVBuffermap2;
+RWTexture2D<uint4> gVBuffermap3;
+RWTexture2D<uint4> gVBuffermap4;
 
 #define is_valid_gDepth 1
 #define is_valid_gMotionVector 1
@@ -50,11 +56,38 @@ Texture2D<uint4> gVBuffermap;
 
 #define is_valid(name) (is_valid_##name != 0)
 
+inline float gaussian_function(float b, float t)
+{
+    return exp(-t * t / (2 * b * b)) / sqrt(2.0f * M_PI) / b;
+}
+
+inline float degToRad(float value) { return value * (M_PI / 180.0f); }
+
+#define INTEGRATOR_NUM_SAMPLE 140
+#define AZIMUTHAL_PRECOMPUTE_RESOLUTION 64
+#define GAUSSIAN_DETECTOR_SAMPLES 2048
+
 struct HairRenderAsset {
     uint2 frameDim;
     uint frameCount;
     float4x4 ShadowVP;
     float3 lightPos;
+    static const float3 lightColor = float3(1.0, 0.75, 0.792);
+    static const float lightintensity = 1.5;
+
+    float3 albedo;
+    static const float m_eta = 1.55f;
+    // longtitudinal shift
+    static const float m_alpha = degToRad(3.0f);
+    static const float alpha[3] = { m_alpha,
+                                    -m_alpha / 2,
+                                    -3 * m_alpha / 2};
+    // longtitudinal width
+    static const float m_beta = degToRad(2.2f);
+    static const float beta[3] = { m_beta,
+                                    m_beta / 2,
+                                    m_beta * 2 };
+    static const float3 m_absorption = float3(0.3, 0.6, 0.9f);
 
     static const float4 colors[5] = {
         float4(0.0, 0.0, 0.0, 1.0), // 黑色
@@ -85,199 +118,187 @@ struct HairRenderAsset {
         return gScene.camera.computeRayPinhole(pixel, frameDim);
     }
 
+    bool areEqual(uint4 original, uint4 num) {
+        // 比较两个 uint4 向量的所有分量
+        bool4 comparison = (original == num);
+
+        // 检查所有分量是否都为真
+        return comparison.x && comparison.y && comparison.z && comparison.w;
+    }
+
+    uint pack(uint a, uint b, uint c, uint d) {
+        return (a | (b << 4) | (c << 8) | (d << 12));
+    }
+
+    void unpack(uint packed, out uint a, out uint b, out uint c, out uint d) {
+        a = packed & 0xF;
+        b = (packed >> 4) & 0xF;
+        c = (packed >> 8) & 0xF;
+        d = (packed >> 12) & 0xF;
+    }
+
+    float3 debugColor(uint id) {
+        return colors[id % 5].xyz;
+    }
+
+    float3 debugColor(float data) {
+        return float3(data);
+    }
+
+
+    float3 approxNp(float cos_theta_d, float phi, int i)
+    {
+        // costhetad -> phi
+        float u = (AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1) * phi * M_1_PI * 0.5f;
+        float v = (AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1) * cos_theta_d;
+        int x0 = clamp(int(u), 0, AZIMUTHAL_PRECOMPUTE_RESOLUTION - 2);
+        int y0 = clamp(int(v), 0, AZIMUTHAL_PRECOMPUTE_RESOLUTION - 2);
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+        u = clamp(u - x0, 0.0f, 1.0f);
+        v = clamp(v - y0, 0.0f, 1.0f);
+
+        return (gNp_tex[x0 * 3 + i][y0] * (1.0f - u) + gNp_tex[x1 * 3 + i][y0] * u) * (1.0f - v) +
+               (gNp_tex[x0 * 3 + i][y1] * (1.0f - u) + gNp_tex[x1 * 3 + i][y1] * u) * v;
+    }
+
+    float3 eval(const float3 wi, const float3 wo) {
+        // if (min(wi.z, -wo.z) < kMinCosTheta)
+        //     return float3(0.0f);
+
+        float theta_i = asin(clamp(wi.x, -1.0f, 1.0f));
+        float theta_r = asin(clamp(wo.x, -1.0f, 1.0f));
+        float phi_i = atan2(wi.y, wi.z);
+        float phi_r = atan2(wo.y, wo.z);
+        float phi = phi_r - phi_i, theta_d = abs((theta_r - theta_i)) / 2, theta_h = (theta_i + theta_r) / 2;
+
+
+
+        if (phi < 0.f)
+            phi += M_PI * 2;
+        if (phi > M_PI * 2)
+            phi -= M_PI * 2;
+
+
+
+        float3 result = float3(0.f);
+
+        // M term, we'll simply use gaussian distribution here
+        float Mp[3];
+        for (int i = 0; i < 3; i++)
+        {
+            Mp[i] = gaussian_function(beta[i], theta_h - alpha[i]);
+        }
+
+        float cos_theta_d = cos(theta_d);
+
+        Mp[0] = gaussian_function(beta[0], theta_h * 2);
+
+        // result += Mp[0] * approxNp(cos_theta_d, phi, 0);
+        // result += Mp[1] * approxNp(cos_theta_d, phi, 1);
+        result += Mp[2] * approxNp(cos_theta_d, phi, 2);
+
+        return result;
+    }
+
     void visualizeHair(uint2 pixel) {
-        uint type = 0;
-        uint count;
-        if (gVBuffermap[pixel].x != 0) {
-            type += 1;
-        }
-        if (gVBuffermap[pixel].y != 0) {
-            type += 1;
-        }
-        if (gVBuffermap[pixel].z != 0) {
-            type += 1;
-        }
-        if (gVBuffermap[pixel].w != 0) {
-            type += 1;
-        }
-        gVBuffer[pixel] = colors[type];
-    }
+        uint4 datas[4] = { gVBuffermap[pixel],
+                        gVBuffermap2[pixel],
+                        gVBuffermap3[pixel],
+                        gVBuffermap4[pixel] };
 
-    void RenderHair(uint2 pixel)
-    {
-        uint prims[4] = { 0, 0, 0, 0 };
-        uint counts[4] = { 0, 0, 0, 0 };
-        uint count;
-        if (gVBuffermap[pixel].x != 0) {
-            prims[0] = unpackData(gVBuffermap[pixel].x, count);
-            counts[0] = count;
-        }
-        if (gVBuffermap[pixel].y != 0) {
-            prims[1] = unpackData(gVBuffermap[pixel].y, count);
-            counts[1] = count;
-        }
-        if (gVBuffermap[pixel].z != 0) {
-            prims[2] = unpackData(gVBuffermap[pixel].z, count);
-            counts[2] = count;
-        }
-        if (gVBuffermap[pixel].w != 0) {
-            prims[3] = unpackData(gVBuffermap[pixel].w, count);
-            counts[3] = count;
-        }
-        uint total = counts[0] + counts[1] + counts[2] + counts[3];
-        
-        Ray ray = generateRay(pixel);
+        HitInfo hits[4] = { HitInfo(gVBuffermap[pixel]) ,
+                            HitInfo(gVBuffermap2[pixel]),
+                            HitInfo(gVBuffermap3[pixel]),
+                            HitInfo(gVBuffermap4[pixel]) };
 
+        VertexData v[4] = { 0,
+                            0,
+                            0,
+                            0 };
 
-    }
-}
-struct VBufferRT
-{
-    static const bool kComputeDepthOfField = true;
-    static const bool kUseAlphaTest = true;
-    static const uint kRayFlags = false;
+        TriangleHit triangleHit[4] = { 0,
+                            0,
+                            0,
+                            0 };
 
-    uint2 frameDim;
-    uint frameCount;
-    float4x4 ShadowVP;
-    float3 lightPos;
-    Camera lightCamera;
-
-    Ray generateRay(uint2 pixel)
-    {
-        return gScene.camera.computeRayPinhole(pixel, frameDim);
-    }
-
-    Ray generateRay8xMSAA(uint2 pixel);
-    {
-        return gScene.camera.computeRayPinhole(pixel, frameDim);
-    }
-
-    Ray generateRayWithLightVP(uint2 pixel)
-    {
-        return gScene.camera.computeRayPinholeWithLightVP(pixel, frameDim, lightPos, ShadowVP);
-    }
-
-    static const float4 colors[4] = {
-        float4(1.0, 0.0, 0.0, 1.0), // 红色
-        float4(0.0, 1.0, 0.0, 1.0), // 绿色
-        float4(0.0, 0.0, 1.0, 1.0), // 蓝色
-        float4(1.0, 1.0, 0.0, 1.0)  // 黄色
-    };
-
-    uint packData(uint number, uint count) {
-        if (count >= 8) {
-            return 0;
-        }
-        return (count << 29) | (number & 0x1FFFFFFF); // 将count放到高3位，number放到低29位
-    }
-
-    uint unpackData(uint data, out uint count) {
-        count = (data >> 29) & 0x7;
-        return data & 0x1FFFFFFF;
-    }
-
-    bool tryUpdateChannel(inout uint packedData, uint primitiveIndex) {
-        if (packedData == 0) {
-            packedData = packData(primitiveIndex, 1);
-            return true;
-        } else {
-            uint count;
-            uint primID = unpackData(packedData, count);
-            if (primID == primitiveIndex) {
-                packedData = packData(primitiveIndex, count + 1);
-                return true;
+        for (uint i = 0; i < 4; i++) {
+            if (!areEqual(datas[i], uint4(0, 0, 0, 0))) {
+                if (hits[i].getType() == HitType::Triangle) {
+                    triangleHit[i] = hits[i].getTriangleHit();
+                    v[i] = gScene.getVertexData(triangleHit[i]);
+                }
+            }
+            else {
+                break;
             }
         }
-        return false;
-    }
 
-    void writeHit(uint2 pixel, float3 rayOrigin, float3 rayDir, const HitInfo hit)
-    {
-        // gVBuffer[pixel] = hit.getData();
+        // GeometryInstanceID instanceID = triangleHit[0].instanceID;
+        // uint primitiveIndex = triangleHit[0].primitiveIndex;
+        // float3 barycoords = triangleHit[0].getBarycentricWeights();
 
-        VertexData v;
-        float depth = 1.f;
-        float3 prevPosW = float3(0.f);
-        float2 motionVector = float2(0.f);
+        // float3 normalW = v[0].normalW;
 
-        if (hit.getType() == HitType::Triangle)
-        {
-            const TriangleHit triangleHit = hit.getTriangleHit();
-            GeometryInstanceID instanceID = triangleHit.instanceID;
-            uint primitiveIndex = triangleHit.primitiveIndex;
+        // float3 lightDir = normalize(v[0].posW - lightPos);
+        // float3 lightDirVis = (lightDir + float3(1.0, 1.0, 1.0)) / 2.0;
+        // float diff = dot(normalW, lightDir);
+        // float3 diffuse = lightColor * diff * lightintensity;
+        // gVBuffer[pixel] = float4(diffuse.x, diffuse.y, diffuse.z, 1.0);
 
-            // if (!tryUpdateChannel(gVBuffer[pixel].x, primitiveIndex)) {
-            //     if (!tryUpdateChannel(gVBuffer[pixel].y, primitiveIndex)) {
-            //         if (!tryUpdateChannel(gVBuffer[pixel].z, primitiveIndex)) {
-            //             tryUpdateChannel(gVBuffer[pixel].w, primitiveIndex);
-            //         }
-            //     }
-            // }
+        float3 color = float3(0.0, 0.0, 0.0);
+        uint weights[4];
+        unpack(gHitCount[pixel], weights[0], weights[1], weights[2], weights[3]);
+        Ray ray = generateRay(pixel);
+        float3 raydir = ray.dir;
 
-            v = gScene.getVertexData(triangleHit);
-            prevPosW = gScene.getPrevPosW(triangleHit);
+        for (int i = 0; i < 4; i++) {
+            if (areEqual(datas[i], uint4(0, 0, 0, 0))) {
+            }
+            else {
+                float3 normalW = v[i].normalW;   ///< Shading normal in world space (normalized).
+                float3 lightDir = -normalize(v[i].posW - lightPos);
+                float4 tangentW = v[i].tangentW; ///< Shading tangent in world space (normalized). The last component is guaranteed to be +-1.0 or zero if tangents are missing.
+                float3 raydir = -ray.dir;
+
+                float3 bitangentW = cross(normalW, tangentW.xyz) * tangentW.w;
+
+                float3x3 TBN = float3x3(tangentW.xyz, bitangentW, normalW); // 构建切线空间矩阵
+                float3x3 TBN_inv = transpose(TBN);                          // 切线空间矩阵的逆（转置）
+
+                // 转换 lightDir 和 raydir 到切线空间
+                float3 lightDirT = mul(lightDir, TBN_inv);
+                float3 rayDirT = mul(raydir, TBN_inv);
+
+                // if(lightDirT.z < 0.0)
+                //     lightDirT = -lightDirT;
+
+                // if(rayDirT.z < 0.0)
+                //     rayDirT = -rayDirT;
+
+                // float diff = dot(normalW, lightDir);
+                // float3 diffuse = lightColor * diff * lightintensity;
+                float3 diffuse = eval(lightDirT, rayDirT);
+                color += diffuse * weights[i];
+
+            }
         }
-        else if (hit.getType() == HitType::DisplacedTriangle)
-        {
-            const DisplacedTriangleHit displacedTriangleHit = hit.getDisplacedTriangleHit();
-            v = gScene.getVertexData(displacedTriangleHit, -rayDir);
-            prevPosW = gScene.getPrevPosW(displacedTriangleHit);
-        }
-        else if (hit.getType() == HitType::Curve)
-        {
-            const CurveHit curveHit = hit.getCurveHit();
-            v = gScene.getVertexDataFromCurve(curveHit);
-            prevPosW = gScene.getPrevPosWFromCurve(curveHit);
-        }
-        else if (hit.getType() == HitType::SDFGrid)
-        {
-            const SDFGridHit sdfGridHit = hit.getSDFGridHit();
-            v = gScene.getVertexDataFromSDFGrid(sdfGridHit, rayOrigin, rayDir);
+        if (weights[0] + weights[1] + weights[2] + weights[3] != 0u)
+            color /= (weights[0] + weights[1] + weights[2] + weights[3]);
 
-            prevPosW = gScene.getPrevPosWFromSDFGrid(sdfGridHit, v.posW);
-        }
+        if (color.x == 0.0 && color.y == 0.0 && color.z == 0.0)
+            color = gScene.envMap.eval(raydir);
 
-        // if (hit.getType() == HitType::Triangle || hit.getType() == HitType::DisplacedTriangle || hit.getType() == HitType::Curve ||
-        //     hit.getType() == HitType::SDFGrid)
-        // {
-        //     // Compute depth similar to raster (NDC).
-        //     float4 curPosH = mul(gScene.camera.data.viewProjMatNoJitter, float4(v.posW, 1.f));
-        //     depth = curPosH.z / curPosH.w;
+        gVBuffer[pixel] = float4(color, 1.0);
 
-        //     // Compute motion vector.
-        //     float2 pixelPos = pixel + float2(0.5f, 0.5f);
-        //     float4 prevPosH = mul(gScene.camera.data.prevViewProjMatNoJitter, float4(prevPosW, 1.f));
-        //     // Remove camera jitter from motion vector
-        //     motionVector = calcMotionVector(pixelPos, prevPosH, frameDim) + float2(gScene.camera.data.jitterX, -gScene.camera.data.jitterY);
-        // }
-
-        // if (is_valid(gDepth))
-        //     gDepth[pixel] = depth;
-        // if (is_valid(gMotionVector))
-        //     gMotionVector[pixel] = motionVector;
-        // if (is_valid(gMask))
-        //     gMask[pixel] = 1.0f;
-    }
-
-    void writeMiss(uint2 pixel, float3 rayOrigin, float3 rayDir)
-    {
-        // gVBuffer[pixel] = {};
-
-        if (is_valid(gDepth))
-            gDepth[pixel] = 1.f;
-        if (is_valid(gMotionVector))
-            gMotionVector[pixel] = {};
-        if (is_valid(gMask))
-            gMask[pixel] = 0.0f;
-    }
-
-    void writeAux(uint2 pixel, const Ray ray)
-    {
-        // Write view direction.
-        if (is_valid(gViewW))
-            gViewW[pixel] = float4(-ray.dir, 0.f);
+        if (pixel.x <= AZIMUTHAL_PRECOMPUTE_RESOLUTION * 3 && pixel.y <= AZIMUTHAL_PRECOMPUTE_RESOLUTION)
+            gViewW[pixel] = float4(gNp_tex[pixel], 1.0);
     }
 
 
-};
+    // void RenderHair(uint2 pixel)
+    // {
+
+
+    // }
+}
