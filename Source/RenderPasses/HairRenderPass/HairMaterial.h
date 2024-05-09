@@ -250,24 +250,34 @@ struct HairBSDF
 
             float precom_fresnel[INTEGRATOR_NUM_SAMPLE], gamma_t_table[INTEGRATOR_NUM_SAMPLE];
             float3 absorption_table[INTEGRATOR_NUM_SAMPLE];
+
+            // FILE *out;
+            // out = fopen( "D:/Debug/debug.txt", "w" );
+            // if( out == NULL )
+            //     exit(1);
+
             for (int k = 0; k < INTEGRATOR_NUM_SAMPLE; k++)
             {
                 precom_fresnel[k] = fresnelDielectricExt(cos_theta_d * cos(gamma_i_table[k]), m_eta);
                 gamma_t_table[k] = asin(std::clamp(integrator._points[k] / eta_prime, -1.f, 1.f));
                 absorption_table[k] = exp((-2.f * absorption_prime * (1.f + cos(2.f * gamma_t_table[k]))));
+                // fprintf(out, "precom_fresnel: %f when k = %d, cos_theta_d = %f, cos(gamma_i_table[k]) = %f\n", precom_fresnel[k], k, cos_theta_d, cos(gamma_i_table[k]));
             }
-            FILE *out;
-            out = fopen( "D:/Debug/debug.txt", "w" );
-            if( out == NULL )
-                exit(1);
+
+
+
 
             // 预计算Phi: azimuthal scattering方向
+
             for (int x = 0; x < AZIMUTHAL_PRECOMPUTE_RESOLUTION; x++)
             {
                 float phi = M_PI * 2.f * x / (AZIMUTHAL_PRECOMPUTE_RESOLUTION - 1.f);
 
+                // fprintf(out, "When phi = %f\n", phi);
+
                 for (int i = 0; i < 3; i++)
                 {
+                    // fprintf(out, "When i = %d\n", i);
                     float3 Np = float3(0.f);
                     for (int j = 0; j < INTEGRATOR_NUM_SAMPLE; j++)
                     {
@@ -283,11 +293,12 @@ struct HairBSDF
                             // printf("T = %f %f %f\n", T.x, T.y, T.z);
                             float3 A = pow(T, i) * sqr(1.f - f) * float(pow(f, i - 1));
 
-                            fprintf(out, "pow(T, i)= %f %f %f when i = %d\n", pow(T, i).x, pow(T, i).y, pow(T, i).z, i);
+                            // fprintf(out, "pow(T, i)= %f %f %f when i = %d\n", pow(T, i).x, pow(T, i).y, pow(T, i).z, i);
+                            // fprintf(out, "sqr(1.f - f) = %f when i = %d\n", sqr(1.f - f), i);
                             // fprintf(out, "A = %f %f %f when i = %d\n", A.x, A.y, A.z, i);
                             Np += A * float(0.5) * Dp * integrator._weights[j];
-                            // printf("Np: %f %f %f\n", Np.x, Np.y, Np.z);
-                            // printf("Np: %f %f %f when i = %d\n", Np.x, Np.y, Np.z, i);
+                            // fprintf(out, "Dp: %f when i = %d\n", Dp, i);
+                            // fprintf(out, "Np: %f %f %f when i = %d\n", Np.x, Np.y, Np.z, i);
                         }
 
                     }
@@ -295,8 +306,7 @@ struct HairBSDF
                     Np_table[y][x * 3 + i] = Np;
                 }
             }
-            fclose(out);
-            exit(0);
+
         }
     }
 
