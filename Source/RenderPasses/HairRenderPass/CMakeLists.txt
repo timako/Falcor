@@ -5,7 +5,7 @@ target_sources(HairRenderPass PRIVATE
     HairRenderPass.h
     HairRenderPass.cs.slang
     HairRenderPass.slang
-    HairMaterial.h
+    HairMaterial_re.h
     MathUtils.h
 )
 target_copy_shaders(HairRenderPass RenderPasses/HairRenderPass)

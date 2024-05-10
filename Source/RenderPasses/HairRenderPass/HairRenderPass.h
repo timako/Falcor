@@ -29,7 +29,7 @@
 #include "Falcor.h"
 #include "RenderGraph/RenderPass.h"
 #include "RenderGraph/RenderPassHelpers.h"
-#include "HairMaterial.h"
+#include "HairMaterial_re.h"
 
 using namespace Falcor;
 
@@ -88,7 +88,7 @@ private:
     float4x4 mLightVP;
 
     ref<SampleGenerator> mpSampleGenerator;
-    HairBSDF mHairBSDF;
+    MarschnerHair mHairBSDF;
 
     ref<Texture> GD_tex;
     ref<Texture> Np_tex;

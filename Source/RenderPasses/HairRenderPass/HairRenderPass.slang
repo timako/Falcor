@@ -63,6 +63,13 @@ inline float gaussian_function(float b, float t)
 
 inline float degToRad(float value) { return value * (M_PI / 180.0f); }
 
+float fresnel_schlick(float cos_theta, float n)
+{
+    float R0 = (1.0f - n) / (1.0f + n);
+    R0 = R0 * R0;
+    return R0 + (1.0f - R0) * pow(1.0f - cos_theta, 5.0f);
+}
+
 #define INTEGRATOR_NUM_SAMPLE 140
 #define AZIMUTHAL_PRECOMPUTE_RESOLUTION 64
 #define GAUSSIAN_DETECTOR_SAMPLES 2048
@@ -72,29 +79,35 @@ struct HairRenderAsset {
     uint frameCount;
     float4x4 ShadowVP;
     float3 lightPos;
-    static const float3 lightColor = float3(0.7216, 0.5255, 0.0431);
+    static const float3 lightPos2 = float3(9.58567524, 19.6876793, -12.0560894);
+    static const float3 lightPos3 = float3(1.34354293, 21.4971638, 8.51427174);
+
+    static const float3 lightColor = float3(0.7, 0.4, 0.1);
     static const float lightintensity = 1.5;
 
     float3 albedo;
     static const float m_eta = 1.55f;
     // longtitudinal shift
-    static const float m_alpha = degToRad(-5.0f);
+    static const float m_alpha = degToRad(3.f);
     static const float alpha[3] = { m_alpha,
                                     -m_alpha / 2,
                                     -3 * m_alpha / 2};
     // longtitudinal width
-    static const float m_beta = degToRad(3.f);
+    static const float m_beta = degToRad(2.2f);
     static const float beta[3] = { m_beta,
                                     m_beta / 2,
                                     m_beta * 2 };
     static const float3 m_absorption = float3(0.3, 0.6, 0.9f);
 
-    static const float4 colors[5] = {
+    static const float4 colors[8] = {
         float4(0.0, 0.0, 0.0, 1.0), // 黑色
+        float4(1.0, 0.0, 0.0, 1.0), // 红色
         float4(0.0, 1.0, 0.0, 1.0), // 绿色
         float4(0.0, 0.0, 1.0, 1.0), // 蓝色
         float4(1.0, 1.0, 0.0, 1.0), // 黄色
-        float4(1.0, 0.0, 1.0, 1.0)  // 紫色
+        float4(1.0, 0.0, 1.0, 1.0), // 紫色
+        float4(0.0, 1.0, 1.0, 1.0), // 青色
+        float4(1.0, 1.0, 1.0, 1.0)  // 白色
     };
 
     uint unpackData(uint data, out uint count) {
@@ -145,6 +158,16 @@ struct HairRenderAsset {
         return float3(data);
     }
 
+    float3 debugFloat(float data){
+        for(int i = 0; i < 7; i++){
+            if(data < i){
+                return colors[i].xyz;
+            }
+        }
+        return colors[7].xyz;
+    }
+
+
 
     float3 approxNp(float cos_theta_d, float phi, int i)
     {
@@ -160,31 +183,37 @@ struct HairRenderAsset {
         int y1 = y0 + 1;
         u = clamp(u - x0, 0.0f, 1.0f);
         v = clamp(v - y0, 0.0f, 1.0f);
+        float3 color = clamp(   (gNp_tex[uint2(x0 * 3 + i, y0)] * (1.0f - u) +
+                                 gNp_tex[uint2(x1 * 3 + i, y0)] * u) *
+                                 (1.0f - v),
 
+                                 float3(0.0001f), float3(1.0f) )
+                                 +
+                      clamp(    (gNp_tex[uint2(x0 * 3 + i, y1)] * (1.0f - u) +
+                                 gNp_tex[uint2(x1 * 3 + i, y1)] * u) *
+                                 v,
+                                                 
+                                 float3(0.0001f), float3(1.0f) );
         // return clamp( (gNp_tex[x0 * 3 + i][y0] * (1.0f - u) + gNp_tex[x1 * 3 + i][y0] * u) * (1.0f - v), float3(0.0001f), float3(1.0f) ) + clamp((gNp_tex[x0 * 3 + i][y1] * (1.0f - u) + gNp_tex[x1 * 3 + i][y1] * u) * v, float3(0.0001f), float3(1.0f));
-        return clamp( (gNp_tex[uint2(x0 * 3 + i, y0)] * (1.0f - u) + gNp_tex[uint2(x1 * 3 + i, y0)] * u) * (1.0f - v), float3(0.0001f), float3(1.0f) ) + clamp((gNp_tex[uint2(x0 * 3 + i, y1)] * (1.0f - u) + gNp_tex[uint2(x1 * 3 + i, y1)] * u) * v, float3(0.0001f), float3(1.0f));
+        return color;
     }
 
-    float3 eval(const float3 wi, const float3 wo) {
-        // if (min(wi.z, -wo.z) < kMinCosTheta)
-        //     return float3(0.0f);
+    float3 eval(const float3 wi_geo, const float3 wo_geo)
+    {
+        // from shading coord to geo coord
 
-        float theta_i = asin(clamp(wi.x, -1.0f, 1.0f));
-        float theta_r = asin(clamp(wo.x, -1.0f, 1.0f));
-
-        float phi_i = atan2(wi.y, wi.z);
-        float phi_r = atan2(wo.y, wo.z);
-        float phi = phi_r - phi_i, theta_d = abs((theta_r - theta_i)) / 2, theta_h = (theta_i + theta_r) / 2;
-
-
+        float theta_i = asin(clamp(wi_geo.x, -1.0f, 1.0f));
+        float theta_r = asin(clamp(wo_geo.x, -1.0f, 1.0f));
+        float phi_i = atan2(wi_geo.y, wi_geo.z);
+        float phi_r = atan2(wo_geo.y, wo_geo.z);
+        float phi = phi_r - phi_i;
+        float theta_d = abs((theta_r - theta_i)) / 2;
+        float theta_h = (theta_i + theta_r) / 2;
 
         if (phi < 0.f)
             phi += M_PI * 2;
         if (phi > M_PI * 2)
             phi -= M_PI * 2;
-
-
-
         float3 result = float3(0.f);
 
         // M term, we'll simply use gaussian distribution here
@@ -193,20 +222,12 @@ struct HairRenderAsset {
         {
             Mp[i] = gaussian_function(beta[i], theta_h - alpha[i]);
         }
-
         float cos_theta_d = cos(theta_d);
 
-        Mp[0] = gaussian_function(beta[0], theta_h * 2);
-
-        // result = debugColor(Mp[0]);
-
-        // result = gNp_tex[uint2(1, 0)];
-
-        result += approxNp(cos_theta_d, phi, 0);
-        // result += Mp[1] * approxNp(cos_theta_d, phi, 1);
-        // result += Mp[2] * approxNp(cos_theta_d, phi, 2);
-
-        // result *= lightColor;
+        // Mp[0] = gaussian_function(beta[0], theta_h * 2);
+        result += Mp[0] * approxNp(cos_theta_d, phi, 0) * lightColor * 2;
+        result += Mp[1] * approxNp(cos_theta_d, phi, 1);
+        result += Mp[2] * approxNp(cos_theta_d, phi, 2);
 
         return result;
     }
@@ -276,28 +297,6 @@ struct HairRenderAsset {
             }
         }
 
-        // float3 vertTangentW[4];
-        // for (int i = 0; i < 4; i++) {
-        //     if (areEqual(datas[i], uint4(0, 0, 0, 0))) {
-        //         break;
-        //     }
-        //     else {
-        //         vertTangentW[i] = findAndNormalizeLongestSides(vertices[i][0].position, vertices[i][1].position, vertices[i][2].position);
-        //     }
-        // }
-
-        // GeometryInstanceID instanceID = triangleHit[0].instanceID;
-        // uint primitiveIndex = triangleHit[0].primitiveIndex;
-        // float3 barycoords = triangleHit[0].getBarycentricWeights();
-
-        // float3 normalW = v[0].normalW;
-
-        // float3 lightDir = normalize(v[0].posW - lightPos);
-        // float3 lightDirVis = (lightDir + float3(1.0, 1.0, 1.0)) / 2.0;
-        // float diff = dot(normalW, lightDir);
-        // float3 diffuse = lightColor * diff * lightintensity;
-        // gVBuffer[pixel] = float4(diffuse.x, diffuse.y, diffuse.z, 1.0);
-
         float3 color = float3(0.0, 0.0, 0.0);
         uint weights[4];
         unpack(gHitCount[pixel], weights[0], weights[1], weights[2], weights[3]);
@@ -307,11 +306,11 @@ struct HairRenderAsset {
 
         for (int i = 0; i < 4; i++) {
             if (areEqual(datas[i], uint4(0, 0, 0, 0))) {
+                break;
             }
             else {
                 float3 normalW = v[i].normalW;   ///< Shading normal in world space (normalized).
                 float3 lightDir = -normalize(v[i].posW - lightPos);
-                float lightLen = length(v[i].posW - lightPos);
                 float4 tangentW = v[i].tangentW; ///< Shading tangent in world space (normalized). The last component is guaranteed to be +-1.0 or zero if tangents are missing.
                 // float4 tangentW = float4(vertTangentW[i], 1.0);
                 float3 raydir = -ray.dir;
@@ -325,19 +324,28 @@ struct HairRenderAsset {
                 float3 lightDirT = mul(lightDir, TBN_inv);
                 float3 rayDirT = mul(raydir, TBN_inv);
 
+                float3 lightDir2 = -normalize(v[i].posW - lightPos2);
+                float3 lightDir2T = mul(lightDir, TBN_inv);
+
+                float3 lightDir3 = -normalize(v[i].posW - lightPos3);
+                float3 lightDir3T = mul(lightDir, TBN_inv);
+
+
                 // if(lightDirT.z < 0.0)
                 //     lightDirT = -lightDirT;
 
                 // if(rayDirT.z < 0.0)
                 //     rayDirT = -rayDirT;
 
-                float3 lightDirTVis = (lightDirT + 1.0) / 2;
-                float3 rayDirTVis = (rayDirT + 1.0) / 2;
+                // float3 lightDirTVis = (lightDirT + 1.0) / 2;
+                // float3 rayDirTVis = (rayDirT + 1.0) / 2;
 
                 // float diff = dot(normalW, lightDir);
                 // float3 diffuse = lightColor * diff * lightintensity;
                 // float3 diffuse = eval(lightDirT, rayDirT);
                 float3 diffuse = eval(lightDirT, rayDirT);
+                // diffuse += eval(lightDir2T, rayDirT);
+                // diffuse += eval(lightDir3T, rayDirT);
                 // float3 diffuse = v[i].tangentW.xyz;
                 color += diffuse * weights[i];
 
@@ -350,14 +358,5 @@ struct HairRenderAsset {
             color = gScene.envMap.eval(raydir);
 
         gVBuffer[pixel] = float4(color, 1.0);
-
-
     }
-
-
-    // void RenderHair(uint2 pixel)
-    // {
-
-
-    // }
 }

@@ -26,7 +26,7 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
 #include "HairRenderPass.h"
-#include "HairMaterial.h"
+#include "HairMaterial_re.h"
 #include "Scene/HitInfo.h"
 #include "RenderGraph/RenderPassStandardFlags.h"
 #include "RenderGraph/RenderPassHelpers.h"

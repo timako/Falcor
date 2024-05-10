@@ -213,11 +213,20 @@ struct HairBSDF
         beta[0] = m_beta;
         beta[1] = m_beta / 2;
         beta[2] = m_beta * 2;
-        m_alpha = -5.0;
+        m_alpha = 3.0f;
         m_alpha = degToRad(m_alpha);
         alpha[0] = m_alpha;
         alpha[1] = -m_alpha / 2;
         alpha[2] = -3 * m_alpha / 2;
+
+        FILE* out;
+        out = fopen("D:/Debug/debug.txt", "w");
+        if(out == NULL)
+        {
+            printf("Error opening file!\n");
+            exit(1);
+        }
+
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < GAUSSIAN_DETECTOR_SAMPLES; j++)
@@ -225,6 +234,18 @@ struct HairBSDF
                 GD_table[j][i] = gaussian_detector(beta[i], j / (GAUSSIAN_DETECTOR_SAMPLES - 1.0f) * M_PI * 2.0f);
             }
         }
+
+        for (int j = 0; j < GAUSSIAN_DETECTOR_SAMPLES; j++ )
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                GD_table[j][i] = gaussian_detector(beta[i], j / (GAUSSIAN_DETECTOR_SAMPLES - 1.0f) * M_PI * 2.0f);
+                // fprintf(out, "GD_table[%d][%d] = %f ", j, i, GD_table[j][i]);
+            }
+            // fprintf(out, "when phi = %f\n", j / (GAUSSIAN_DETECTOR_SAMPLES - 1.0f) * M_PI * 2.0f);
+        }
+        // exit(0);
+
         // precompute gamma_i table
         float gamma_i_table[INTEGRATOR_NUM_SAMPLE];
         GaussLegendre integrator;
@@ -234,10 +255,21 @@ struct HairBSDF
         }
 
 
+
+
         // precompute azimuthal scattering function from 2 dimension
         // cos(theta_d): [0, 1]
         // phi: [0, 2*PI]
         //预计算 cos_theta_d: longitudinal方向
+
+        // FILE* out;
+        // out = fopen("D:/Debug/debug.txt", "w");
+        // if(out == NULL)
+        // {
+        //     printf("Error opening file!\n");
+        //     exit(1);
+        // }
+
         for (int y = 0; y < AZIMUTHAL_PRECOMPUTE_RESOLUTION; y++)
         {
             // cos theta_d, sin theta_d
@@ -251,17 +283,12 @@ struct HairBSDF
             float precom_fresnel[INTEGRATOR_NUM_SAMPLE], gamma_t_table[INTEGRATOR_NUM_SAMPLE];
             float3 absorption_table[INTEGRATOR_NUM_SAMPLE];
 
-            // FILE *out;
-            // out = fopen( "D:/Debug/debug.txt", "w" );
-            // if( out == NULL )
-            //     exit(1);
-
             for (int k = 0; k < INTEGRATOR_NUM_SAMPLE; k++)
             {
                 precom_fresnel[k] = fresnelDielectricExt(cos_theta_d * cos(gamma_i_table[k]), m_eta);
                 gamma_t_table[k] = asin(std::clamp(integrator._points[k] / eta_prime, -1.f, 1.f));
                 absorption_table[k] = exp((-2.f * absorption_prime * (1.f + cos(2.f * gamma_t_table[k]))));
-                // fprintf(out, "precom_fresnel: %f when k = %d, cos_theta_d = %f, cos(gamma_i_table[k]) = %f\n", precom_fresnel[k], k, cos_theta_d, cos(gamma_i_table[k]));
+
             }
 
 
@@ -282,14 +309,35 @@ struct HairBSDF
                     for (int j = 0; j < INTEGRATOR_NUM_SAMPLE; j++)
                     {
                         float Dp = approxGD(i, phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
+                        // Dp = gaussian_function(beta[i], phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
+                        // fprintf(out, "Dp: %f when i = %d, beta[i] = %f, phi - Phi(i, gamma_i_table[j], gamma_t_table[j]) %f\n", Dp, i, beta[i],  phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
+                        // float Dp_3 = gaussian_function(beta[i], phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
+                        // fprintf(out, "Dp_3: %f when i = %d, beta[i] = %f, phi - Phi(i, gamma_i_table[j], gamma_t_table[j]) %f\n", Dp_3, i, beta[i],  phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
+                        // Dp = gaussian_detector(beta[i], phi - Phi(i, gamma_i_table[j], gamma_t_table[j]));
                         float f = precom_fresnel[j];
                         if (i == 0)
                         {
-                            Np += float3(0.5 * f * Dp * integrator._weights[j]);
+                            float theta_d = acos(cos_theta_d);
+                            float3 dir;
+                            dir.x = sin(theta_d);
+                            dir.y = cos(theta_d) * sin(phi);
+                            dir.z = cos(theta_d) * cos(phi);
+
+                            float3 dir_r;
+                            dir_r.x = - dir.x;
+                            dir_r.y = -dir.y;
+                            dir_r.z = dir.z;
+
+                            float dot_ = dot(dir, dir_r);
+
+
+                            float A = fresnelDielectricExt(0.5 * acos(dot_), m_eta);
+                            Np += float3(Dp * integrator._weights[j]);
                         }
                         else
                         {
                             float3 T = absorption_table[j];
+
                             // printf("T = %f %f %f\n", T.x, T.y, T.z);
                             float3 A = pow(T, i) * sqr(1.f - f) * float(pow(f, i - 1));
 
@@ -316,6 +364,12 @@ struct HairBSDF
         float x, y, delta;
         int k = 0;
         float M_PIx2 = float(M_PI) * 2;
+        phi = fmod(phi, M_PIx2);
+        if (phi < -M_PI) {
+            phi += M_PIx2;
+        } else if (phi > M_PI) {
+            phi -= M_PIx2;
+        }
         do
         {
             x = gaussian_function(b, phi - M_PIx2 * float(k));
@@ -323,7 +377,7 @@ struct HairBSDF
             delta = x + y;
             k++;
             result += x + y;
-        } while (delta > 1e-4f);
+        } while (delta > 1e-5f);
         return result;
     }
 
@@ -338,60 +392,6 @@ struct HairBSDF
         \param[in,out] sg Sample generator.
         \return Returns f(wi, wo) * dot(wo, n).
     */
-
-    float3 eval(const float3 wi, const float3 wo) {
-        if (std::min(wi.z, -wo.z) < kMinCosTheta)
-            return float3(0.f);
-
-        float theta_i = asin(std::clamp(wi.x, -1.0f, 1.0f));
-        float theta_r = asin(std::clamp(wo.x, -1.0f, 1.0f));
-        float phi_i = atan2(wi.y, wi.z);
-        float phi_r = atan2(wo.y, wo.z);
-        float phi = phi_r - phi_i, theta_d = abs((theta_r - theta_i)) / 2, theta_h = (theta_i + theta_r) / 2;
-        if (phi < 0.f)
-            phi += float(M_PI) * 2;
-        if (phi > M_PI * 2)
-            phi -= float(M_PI) * 2;
-
-        float3 result = float3(0.f);
-
-        // M term, we'll simply use gaussian distribution here
-        float Mp[3];
-        for (int i = 0; i < 3; i++)
-        {
-            Mp[i] = gaussian_function(beta[i], theta_h - alpha[i]);
-        }
-        float cos_theta_d = cos(theta_d);
-        Mp[0] = gaussian_function(beta[0], theta_h * 2);
-        result += Mp[0] * approxNp(cos_theta_d, phi, 0);
-        result += Mp[1] * approxNp(cos_theta_d, phi, 1);
-        result += Mp[2] * approxNp(cos_theta_d, phi, 2);
-
-        return result;
-    }
-
-
-    /** Samples the BSDF.
-        \param[in] wi Incident direction.
-        \param[out] wo Outgoing direction.
-        \param[out] pdf pdf with respect to solid angle for sampling outgoing direction wo (0 if a delta event is sampled).
-        \param[out] weight Sample weight f(wi, wo) * dot(wo, n) / pdf(wo).
-        \param[out] lobeType Sampled lobeType (see LobeType).
-        \param[in,out] sg Sample generator.
-        \return Returns true if successful.
-    */
-    // bool sample<S : ISampleGenerator>(const float3 wi, out float3 wo, out float _pdf, out float3 weight, out uint lobeType, inout S sg) {
-    //     wo = squareToUniformSphere(sg);
-    //     _pdf = evalPdf(wi, wo);
-    //     lobeType = (uint)LobeType::DiffuseReflection;
-    //     if (min(wi.z, -wo.z) < kMinCosTheta)
-    //     {
-    //         weight = {};
-    //         return false;
-    //     }
-    //     weight = eval(wi, wo, sg) / _pdf;
-    //     return true;
-    // }
 
     /** Evaluates the directional pdf for sampling outgoing direction wo.
         \param[in] wi Incident direction.
